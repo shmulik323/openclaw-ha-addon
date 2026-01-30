@@ -53,6 +53,14 @@ RUN ARCH=$(echo ${TARGETARCH:-$(uname -m)} | sed 's/aarch64/arm64/;s/x86_64/amd6
 
 WORKDIR /opt/openclaw
 
+# Clone OpenClaw and apply Antigravity fix (PR #4603)
+# Updates User-Agent header to prevent "This version of Antigravity is no longer supported" error
+RUN git clone --depth 1 https://github.com/openclaw/openclaw.git /openclaw-src \
+  && sed -i 's|"User-Agent": "google-api-nodejs-client/9.15.1"|"User-Agent": "antigravity/1.15.8 linux/arm64"|g' \
+  /openclaw-src/extensions/google-antigravity-auth/index.ts \
+  && sed -i 's|"User-Agent": "antigravity"|"User-Agent": "antigravity/1.15.8 linux/arm64"|g' \
+  /openclaw-src/src/infra/provider-usage.fetch.antigravity.ts
+
 COPY onboarding.mjs /onboarding.mjs
 COPY onboarding.html /onboarding.html
 COPY run.sh /run.sh

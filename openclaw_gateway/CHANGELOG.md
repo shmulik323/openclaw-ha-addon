@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.1
+
+- **Temporary Fix**: Patch Antigravity User-Agent header to fix "This version of Antigravity is no longer supported" error when using the `google-antigravity` provider.
+  - Applies the fix from OpenClaw PR #4603 during Docker build.
+  - Updates User-Agent to `antigravity/1.15.8 linux/arm64`.
+  - **Note**: This is a temporary workaround until the main OpenClaw project merges the fix upstream.
+
 ## 0.4.0
 
 - Major: Add Home Assistant Sidebar integration (`panel: true`).

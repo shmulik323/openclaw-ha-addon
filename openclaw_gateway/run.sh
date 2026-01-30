@@ -5,7 +5,7 @@ log() {
   printf "[addon] %s\n" "$*"
 }
 
-log "run.sh version=2026-01-30-openclaw-migration"
+log "run.sh version=2026-01-30-antigravity-fix"
 
 BASE_DIR=/config/openclaw
 STATE_DIR="${BASE_DIR}/.openclaw"
@@ -139,29 +139,53 @@ if [ -n "${BRANCH}" ]; then
   log "branch=${BRANCH}"
 fi
 
+# Use bundled pre-patched OpenClaw source from Docker image
+# This includes the Antigravity fix (PR #4603) to prevent "This version of Antigravity is no longer supported" error
+BUNDLED_SRC="/openclaw-src"
+USE_BUNDLED=false
+
+if [ -d "${BUNDLED_SRC}/.git" ]; then
+  USE_BUNDLED=true
+fi
+
 if [ ! -d "${REPO_DIR}/.git" ]; then
-  log "cloning repo ${REPO_URL} -> ${REPO_DIR}"
-  rm -rf "${REPO_DIR}"
-  if [ -n "${BRANCH}" ]; then
-    git clone --branch "${BRANCH}" "${REPO_URL}" "${REPO_DIR}"
+  if [ "${USE_BUNDLED}" = "true" ]; then
+    log "copying bundled openclaw source (with Antigravity fix) -> ${REPO_DIR}"
+    rm -rf "${REPO_DIR}"
+    cp -a "${BUNDLED_SRC}" "${REPO_DIR}"
+    # Set remote URL for potential future updates
+    git -C "${REPO_DIR}" remote set-url origin "${REPO_URL}" 2>/dev/null || true
+    if [ -n "${BRANCH}" ]; then
+      git -C "${REPO_DIR}" checkout "${BRANCH}" 2>/dev/null || true
+    fi
   else
-    git clone "${REPO_URL}" "${REPO_DIR}"
+    log "cloning repo ${REPO_URL} -> ${REPO_DIR}"
+    rm -rf "${REPO_DIR}"
+    if [ -n "${BRANCH}" ]; then
+      git clone --branch "${BRANCH}" "${REPO_URL}" "${REPO_DIR}"
+    else
+      git clone "${REPO_URL}" "${REPO_DIR}"
+    fi
   fi
 else
-  log "updating repo in ${REPO_DIR}"
-  git -C "${REPO_DIR}" remote set-url origin "${REPO_URL}"
-  git -C "${REPO_DIR}" fetch --prune
-  git -C "${REPO_DIR}" reset --hard
-  git -C "${REPO_DIR}" clean -fd
-  if [ -n "${BRANCH}" ]; then
-    git -C "${REPO_DIR}" checkout "${BRANCH}"
-    git -C "${REPO_DIR}" reset --hard "origin/${BRANCH}"
+  if [ "${USE_BUNDLED}" = "true" ]; then
+    log "using existing repo in ${REPO_DIR} (bundled source available but not overwriting)"
   else
-    DEFAULT_BRANCH=$(git -C "${REPO_DIR}" remote show origin | sed -n '/HEAD branch/s/.*: //p')
-    git -C "${REPO_DIR}" checkout "${DEFAULT_BRANCH}"
-    git -C "${REPO_DIR}" reset --hard "origin/${DEFAULT_BRANCH}"
+    log "updating repo in ${REPO_DIR}"
+    git -C "${REPO_DIR}" remote set-url origin "${REPO_URL}"
+    git -C "${REPO_DIR}" fetch --prune
+    git -C "${REPO_DIR}" reset --hard
+    git -C "${REPO_DIR}" clean -fd
+    if [ -n "${BRANCH}" ]; then
+      git -C "${REPO_DIR}" checkout "${BRANCH}"
+      git -C "${REPO_DIR}" reset --hard "origin/${BRANCH}"
+    else
+      DEFAULT_BRANCH=$(git -C "${REPO_DIR}" remote show origin | sed -n '/HEAD branch/s/.*: //p')
+      git -C "${REPO_DIR}" checkout "${DEFAULT_BRANCH}"
+      git -C "${REPO_DIR}" reset --hard "origin/${DEFAULT_BRANCH}"
+    fi
+    git -C "${REPO_DIR}" clean -fd
   fi
-  git -C "${REPO_DIR}" clean -fd
 fi
 
 cd "${REPO_DIR}"
