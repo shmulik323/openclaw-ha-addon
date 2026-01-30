@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.4.2
+## 0.4.21
 
 - **Fix**: Apply Antigravity User-Agent patches to existing repos on startup (not just new clones).
   - Fixes cases where the bundled source wasn't used because `/config/openclaw/openclaw-src` already existed.
