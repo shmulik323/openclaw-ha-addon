@@ -2,8 +2,9 @@
 
 ## 0.4.21
 
-- **Fix**: Apply Antigravity User-Agent patches to existing repos on startup (not just new clones).
-  - Fixes cases where the bundled source wasn't used because `/config/openclaw/openclaw-src` already existed.
+- **Fix**: Apply Antigravity User-Agent patches AFTER `pnpm install` but BEFORE `pnpm build`.
+  - Previous versions applied patches at the wrong time in the startup sequence.
+  - Now patches are applied unconditionally every startup, ensuring the fix is always active.
 
 ## 0.4.1
 

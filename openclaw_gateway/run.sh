@@ -169,12 +169,7 @@ if [ ! -d "${REPO_DIR}/.git" ]; then
   fi
 else
   if [ "${USE_BUNDLED}" = "true" ]; then
-    log "applying Antigravity fix to existing repo in ${REPO_DIR}"
-    # Apply the patches to existing source to fix User-Agent
-    sed -i 's|"User-Agent": "google-api-nodejs-client/9.15.1"|"User-Agent": "antigravity/1.15.8 linux/arm64"|g' \
-      "${REPO_DIR}/extensions/google-antigravity-auth/index.ts" 2>/dev/null || true
-    sed -i 's|"User-Agent": "antigravity"|"User-Agent": "antigravity/1.15.8 linux/arm64"|g' \
-      "${REPO_DIR}/src/infra/provider-usage.fetch.antigravity.ts" 2>/dev/null || true
+    log "using existing repo in ${REPO_DIR} (patches applied later)"
   else
     log "updating repo in ${REPO_DIR}"
     git -C "${REPO_DIR}" remote set-url origin "${REPO_URL}"
@@ -198,6 +193,15 @@ cd "${REPO_DIR}"
 log "installing dependencies"
 pnpm config set confirmModulesPurge false >/dev/null 2>&1 || true
 pnpm install --no-frozen-lockfile --prefer-frozen-lockfile --prod=false
+
+# Apply Antigravity User-Agent fix AFTER install but BEFORE build
+# This is a temporary workaround until OpenClaw merges PR #4603 upstream
+log "applying Antigravity User-Agent fix (PR #4603)"
+sed -i 's|"User-Agent": "google-api-nodejs-client/9.15.1"|"User-Agent": "antigravity/1.15.8 linux/arm64"|g' \
+  "${REPO_DIR}/extensions/google-antigravity-auth/index.ts" 2>/dev/null || true
+sed -i 's|"User-Agent": "antigravity"|"User-Agent": "antigravity/1.15.8 linux/arm64"|g' \
+  "${REPO_DIR}/src/infra/provider-usage.fetch.antigravity.ts" 2>/dev/null || true
+
 log "building gateway"
 pnpm build
 if [ ! -d "${REPO_DIR}/ui/node_modules" ]; then
