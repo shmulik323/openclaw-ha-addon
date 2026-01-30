@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.2
+
+- **Fix**: Apply Antigravity User-Agent patches to existing repos on startup (not just new clones).
+  - Fixes cases where the bundled source wasn't used because `/config/openclaw/openclaw-src` already existed.
+
 ## 0.4.1
 
 - **Temporary Fix**: Patch Antigravity User-Agent header to fix "This version of Antigravity is no longer supported" error when using the `google-antigravity` provider.

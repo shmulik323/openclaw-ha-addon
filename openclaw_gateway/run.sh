@@ -169,7 +169,12 @@ if [ ! -d "${REPO_DIR}/.git" ]; then
   fi
 else
   if [ "${USE_BUNDLED}" = "true" ]; then
-    log "using existing repo in ${REPO_DIR} (bundled source available but not overwriting)"
+    log "applying Antigravity fix to existing repo in ${REPO_DIR}"
+    # Apply the patches to existing source to fix User-Agent
+    sed -i 's|"User-Agent": "google-api-nodejs-client/9.15.1"|"User-Agent": "antigravity/1.15.8 linux/arm64"|g' \
+      "${REPO_DIR}/extensions/google-antigravity-auth/index.ts" 2>/dev/null || true
+    sed -i 's|"User-Agent": "antigravity"|"User-Agent": "antigravity/1.15.8 linux/arm64"|g' \
+      "${REPO_DIR}/src/infra/provider-usage.fetch.antigravity.ts" 2>/dev/null || true
   else
     log "updating repo in ${REPO_DIR}"
     git -C "${REPO_DIR}" remote set-url origin "${REPO_URL}"
