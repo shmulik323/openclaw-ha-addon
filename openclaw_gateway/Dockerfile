@@ -7,19 +7,19 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN apt-get update \
   && apt-get upgrade -y \
   && apt-get install -y --no-install-recommends \
-    bash \
-    ca-certificates \
-    git \
-    jq \
-    ripgrep \
-    curl \
-    nano \
-    unzip \
-    python3 \
-    python3-pip \
-    make \
-    g++ \
-    openssh-server \
+  bash \
+  ca-certificates \
+  git \
+  jq \
+  ripgrep \
+  curl \
+  nano \
+  unzip \
+  python3 \
+  python3-pip \
+  make \
+  g++ \
+  openssh-server \
   && apt-get clean \
   && rm -rf /var/lib/apt/lists/*
 
@@ -48,11 +48,13 @@ ARG GOG_VERSION=0.6.1
 ARG TARGETARCH
 RUN ARCH=$(echo ${TARGETARCH:-$(uname -m)} | sed 's/aarch64/arm64/;s/x86_64/amd64/') \
   && curl -fsSL "https://github.com/steipete/gogcli/releases/download/v${GOG_VERSION}/gogcli_${GOG_VERSION}_linux_${ARCH}.tar.gz" \
-     | tar xz -C /usr/local/bin gog \
+  | tar xz -C /usr/local/bin gog \
   && chmod +x /usr/local/bin/gog
 
 WORKDIR /opt/openclaw
 
+COPY onboarding.mjs /onboarding.mjs
+COPY onboarding.html /onboarding.html
 COPY run.sh /run.sh
 RUN chmod +x /run.sh
 

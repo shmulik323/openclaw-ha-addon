@@ -179,7 +179,8 @@ log "building control UI"
 pnpm ui:build
 
 if [ ! -f "${OPENCLAW_CONFIG_PATH}" ]; then
-  node scripts/run-node.mjs setup --workspace "${WORKSPACE_DIR}"
+  log "openclaw.json missing; starting onboarding UI on port ${PORT}"
+  NODE_PATH="${REPO_DIR}/node_modules" node /onboarding.mjs "${PORT}"
 else
   log "config exists; skipping openclaw setup"
 fi

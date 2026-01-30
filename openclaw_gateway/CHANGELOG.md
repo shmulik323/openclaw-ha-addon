@@ -1,6 +1,13 @@
 # Changelog
 
-## 0.3.1
+## 0.4.0
+
+- Major: Add Home Assistant Sidebar integration (`panel: true`).
+- Feature: New interactive Onboarding UI with embedded terminal (`xterm.js`).
+- Feature: Auto-reload logic to transition from setup to the OpenClaw Dashboard.
+- Fix: Gateway now uses `ingress` for secure internal proxy access.
+
+## 0.3.21
 
 - Fix: CLI invocation now uses `node scripts/run-node.mjs` instead of `pnpm exec openclaw` to match how the openclaw monorepo runs its CLI.
 
