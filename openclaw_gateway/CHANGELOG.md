@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.10
+
+- **Fix**: Disable `host_network` for proper Ingress support.
+  - Ingress requires standard Docker networking to reach add-on via internal IP.
+  - SSH port (2222) is now exposed via port mapping instead.
+  - Added `proxy_buffering off` to nginx for better WebSocket support.
+
 ## 0.4.9
 
 - **Fix**: Add nginx reverse proxy to enable HA Ingress with `host_network: true`.
