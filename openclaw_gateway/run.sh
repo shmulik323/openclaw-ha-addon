@@ -211,6 +211,27 @@ read_log_file() {
   node -e "const fs=require('fs');const JSON5=require('json5');const p=process.env.OPENCLAW_CONFIG_PATH;const raw=fs.readFileSync(p,'utf8');const data=JSON5.parse(raw);const logging=data.logging||{};const file=String(logging.file||'').trim();if(file){console.log(file);}"; 2>/dev/null
 }
 
+ensure_insecure_auth() {
+  node -e "
+    const fs=require('fs');
+    const JSON5=require('json5');
+    const p=process.env.OPENCLAW_CONFIG_PATH;
+    const raw=fs.readFileSync(p,'utf8');
+    const data=JSON5.parse(raw);
+    const gateway=data.gateway||{};
+    const controlUi=gateway.controlUi||{};
+    if(controlUi.allowInsecureAuth!==true){
+      controlUi.allowInsecureAuth=true;
+      gateway.controlUi=controlUi;
+      data.gateway=gateway;
+      fs.writeFileSync(p, JSON.stringify(data,null,2)+'\\n');
+      console.log('updated');
+    }else{
+      console.log('unchanged');
+    }
+  " 2>/dev/null
+}
+
 if [ -f "${OPENCLAW_CONFIG_PATH}" ]; then
   mode_status="$(ensure_gateway_mode || true)"
   if [ "${mode_status}" = "updated" ]; then
@@ -234,6 +255,16 @@ if [ -f "${OPENCLAW_CONFIG_PATH}" ]; then
     fi
   else
     log "failed to normalize logging.file (invalid config?)"
+  fi
+fi
+
+# Enable insecure auth for HA Ingress HTTP access
+if [ -f "${OPENCLAW_CONFIG_PATH}" ]; then
+  auth_status="$(ensure_insecure_auth || true)"
+  if [ "${auth_status}" = "updated" ]; then
+    log "gateway.controlUi.allowInsecureAuth set to true (for Ingress)"
+  elif [ "${auth_status}" = "unchanged" ]; then
+    log "gateway.controlUi.allowInsecureAuth already set"
   fi
 fi
 

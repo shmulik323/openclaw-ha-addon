@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.11
+
+- **Fix**: Auto-enable `gateway.controlUi.allowInsecureAuth: true` for HA Ingress.
+  - Ingress uses HTTP internally, which triggers OpenClaw's secure context check.
+  - This setting allows token-only auth over HTTP.
+
 ## 0.4.10
 
 - **Fix**: Disable `host_network` for proper Ingress support.
