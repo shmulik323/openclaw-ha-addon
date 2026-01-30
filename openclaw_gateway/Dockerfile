@@ -31,14 +31,6 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | d
   && apt-get install -y gh \
   && rm -rf /var/lib/apt/lists/*
 
-# Install GitHub CLI
-RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
-  && chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg \
-  && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
-  && apt-get update \
-  && apt-get install -y gh \
-  && rm -rf /var/lib/apt/lists/*
-
 ENV BUN_INSTALL=/usr/local/bun
 ENV PNPM_HOME=/pnpm
 ENV PATH="${BUN_INSTALL}/bin:${PNPM_HOME}:${PATH}"
@@ -47,8 +39,7 @@ RUN curl -fsSL https://bun.sh/install | bash
 
 RUN npm install -g pnpm \
   && mkdir -p /pnpm \
-  && pnpm config set global-bin-dir /pnpm \
-  && pnpm add -g clawdhub
+  && pnpm config set global-bin-dir /pnpm
 
 RUN pip3 install --no-cache-dir --break-system-packages homeassistant-cli
 
@@ -60,7 +51,7 @@ RUN ARCH=$(echo ${TARGETARCH:-$(uname -m)} | sed 's/aarch64/arm64/;s/x86_64/amd6
      | tar xz -C /usr/local/bin gog \
   && chmod +x /usr/local/bin/gog
 
-WORKDIR /opt/clawdbot
+WORKDIR /opt/openclaw
 
 COPY run.sh /run.sh
 RUN chmod +x /run.sh

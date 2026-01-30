@@ -5,11 +5,11 @@ log() {
   printf "[addon] %s\n" "$*"
 }
 
-log "run.sh version=2026-01-18-persistent-home"
+log "run.sh version=2026-01-30-openclaw-migration"
 
-BASE_DIR=/config/clawdbot
-STATE_DIR="${BASE_DIR}/.clawdbot"
-REPO_DIR="${BASE_DIR}/clawdbot-src"
+BASE_DIR=/config/openclaw
+STATE_DIR="${BASE_DIR}/.openclaw"
+REPO_DIR="${BASE_DIR}/openclaw-src"
 WORKSPACE_DIR="${BASE_DIR}/workspace"
 SSH_AUTH_DIR="${BASE_DIR}/.ssh"
 
@@ -35,12 +35,12 @@ for dir in .ssh .config .local .cache .npm; do
 done
 log "persistent home symlinks configured"
 
-if [ -d /root/.clawdbot ] && [ ! -f "${STATE_DIR}/clawdbot.json" ]; then
-  cp -a /root/.clawdbot/. "${STATE_DIR}/"
+if [ -d /root/.openclaw ] && [ ! -f "${STATE_DIR}/openclaw.json" ]; then
+  cp -a /root/.openclaw/. "${STATE_DIR}/"
 fi
 
-if [ -d /root/clawdbot-src ] && [ ! -d "${REPO_DIR}" ]; then
-  mv /root/clawdbot-src "${REPO_DIR}"
+if [ -d /root/openclaw-src ] && [ ! -d "${REPO_DIR}" ]; then
+  mv /root/openclaw-src "${REPO_DIR}"
 fi
 
 if [ -d /root/workspace ] && [ ! -d "${WORKSPACE_DIR}" ]; then
@@ -48,18 +48,18 @@ if [ -d /root/workspace ] && [ ! -d "${WORKSPACE_DIR}" ]; then
 fi
 
 export HOME="${BASE_DIR}"
-export CLAWDBOT_STATE_DIR="${STATE_DIR}"
-export CLAWDBOT_CONFIG_PATH="${STATE_DIR}/clawdbot.json"
+export OPENCLAW_STATE_DIR="${STATE_DIR}"
+export OPENCLAW_CONFIG_PATH="${STATE_DIR}/openclaw.json"
 
-log "config path=${CLAWDBOT_CONFIG_PATH}"
+log "config path=${OPENCLAW_CONFIG_PATH}"
 
-cat > /etc/profile.d/clawdbot.sh <<EOF
+cat > /etc/profile.d/openclaw.sh <<EOF
 export HOME="${BASE_DIR}"
 export GH_CONFIG_DIR="${BASE_DIR}/.config/gh"
 export PATH="${BASE_DIR}/bin:\${PATH}"
 if [ -n "\${SSH_CONNECTION:-}" ]; then
-  export CLAWDBOT_STATE_DIR="${STATE_DIR}"
-  export CLAWDBOT_CONFIG_PATH="${STATE_DIR}/clawdbot.json"
+  export OPENCLAW_STATE_DIR="${STATE_DIR}"
+  export OPENCLAW_CONFIG_PATH="${STATE_DIR}/openclaw.json"
   cd "${REPO_DIR}" 2>/dev/null || true
 fi
 EOF
@@ -178,29 +178,29 @@ fi
 log "building control UI"
 pnpm ui:build
 
-if [ ! -f "${CLAWDBOT_CONFIG_PATH}" ]; then
-  pnpm clawdbot setup --workspace "${WORKSPACE_DIR}"
+if [ ! -f "${OPENCLAW_CONFIG_PATH}" ]; then
+  pnpm exec openclaw setup --workspace "${WORKSPACE_DIR}"
 else
-  log "config exists; skipping clawdbot setup"
+  log "config exists; skipping openclaw setup"
 fi
 
 ensure_gateway_mode() {
-  node -e "const fs=require('fs');const JSON5=require('json5');const p=process.env.CLAWDBOT_CONFIG_PATH;const raw=fs.readFileSync(p,'utf8');const data=JSON5.parse(raw);const gateway=data.gateway||{};const mode=String(gateway.mode||'').trim();if(!mode){gateway.mode='local';data.gateway=gateway;fs.writeFileSync(p, JSON.stringify(data,null,2)+'\\n');console.log('updated');}else{console.log('unchanged');}" 2>/dev/null
+  node -e "const fs=require('fs');const JSON5=require('json5');const p=process.env.OPENCLAW_CONFIG_PATH;const raw=fs.readFileSync(p,'utf8');const data=JSON5.parse(raw);const gateway=data.gateway||{};const mode=String(gateway.mode||'').trim();if(!mode){gateway.mode='local';data.gateway=gateway;fs.writeFileSync(p, JSON.stringify(data,null,2)+'\\n');console.log('updated');}else{console.log('unchanged');}" 2>/dev/null
 }
 
 read_gateway_mode() {
-  node -e "const fs=require('fs');const JSON5=require('json5');const p=process.env.CLAWDBOT_CONFIG_PATH;const raw=fs.readFileSync(p,'utf8');const data=JSON5.parse(raw);const gateway=data.gateway||{};const mode=String(gateway.mode||'').trim();if(mode){console.log(mode);}"; 2>/dev/null
+  node -e "const fs=require('fs');const JSON5=require('json5');const p=process.env.OPENCLAW_CONFIG_PATH;const raw=fs.readFileSync(p,'utf8');const data=JSON5.parse(raw);const gateway=data.gateway||{};const mode=String(gateway.mode||'').trim();if(mode){console.log(mode);}"; 2>/dev/null
 }
 
 ensure_log_file() {
-  node -e "const fs=require('fs');const JSON5=require('json5');const p=process.env.CLAWDBOT_CONFIG_PATH;const raw=fs.readFileSync(p,'utf8');const data=JSON5.parse(raw);const logging=data.logging||{};const file=String(logging.file||'').trim();if(!file){logging.file='/tmp/clawdbot/clawdbot.log';data.logging=logging;fs.writeFileSync(p, JSON.stringify(data,null,2)+'\\n');console.log('updated');}else{console.log('unchanged');}" 2>/dev/null
+  node -e "const fs=require('fs');const JSON5=require('json5');const p=process.env.OPENCLAW_CONFIG_PATH;const raw=fs.readFileSync(p,'utf8');const data=JSON5.parse(raw);const logging=data.logging||{};const file=String(logging.file||'').trim();if(!file){logging.file='/tmp/openclaw/openclaw.log';data.logging=logging;fs.writeFileSync(p, JSON.stringify(data,null,2)+'\\n');console.log('updated');}else{console.log('unchanged');}" 2>/dev/null
 }
 
 read_log_file() {
-  node -e "const fs=require('fs');const JSON5=require('json5');const p=process.env.CLAWDBOT_CONFIG_PATH;const raw=fs.readFileSync(p,'utf8');const data=JSON5.parse(raw);const logging=data.logging||{};const file=String(logging.file||'').trim();if(file){console.log(file);}"; 2>/dev/null
+  node -e "const fs=require('fs');const JSON5=require('json5');const p=process.env.OPENCLAW_CONFIG_PATH;const raw=fs.readFileSync(p,'utf8');const data=JSON5.parse(raw);const logging=data.logging||{};const file=String(logging.file||'').trim();if(file){console.log(file);}"; 2>/dev/null
 }
 
-if [ -f "${CLAWDBOT_CONFIG_PATH}" ]; then
+if [ -f "${OPENCLAW_CONFIG_PATH}" ]; then
   mode_status="$(ensure_gateway_mode || true)"
   if [ "${mode_status}" = "updated" ]; then
     log "gateway.mode set to local (missing)"
@@ -211,8 +211,8 @@ if [ -f "${CLAWDBOT_CONFIG_PATH}" ]; then
   fi
 fi
 
-LOG_FILE="/tmp/clawdbot/clawdbot.log"
-if [ -f "${CLAWDBOT_CONFIG_PATH}" ]; then
+LOG_FILE="/tmp/openclaw/openclaw.log"
+if [ -f "${OPENCLAW_CONFIG_PATH}" ]; then
   log_status="$(ensure_log_file || true)"
   if [ "${log_status}" = "updated" ]; then
     log "logging.file set to ${LOG_FILE} (missing)"
@@ -251,7 +251,7 @@ if [ -z "${PORT}" ] || [ "${PORT}" = "null" ]; then
 fi
 
 ALLOW_UNCONFIGURED=()
-if [ ! -f "${CLAWDBOT_CONFIG_PATH}" ]; then
+if [ ! -f "${OPENCLAW_CONFIG_PATH}" ]; then
   log "config missing; allowing unconfigured gateway start"
   ALLOW_UNCONFIGURED=(--allow-unconfigured)
 else
@@ -373,7 +373,7 @@ trap forward_usr1 USR1
 trap shutdown_child TERM INT
 
 while true; do
-  pnpm clawdbot "${ARGS[@]}" &
+  pnpm exec openclaw "${ARGS[@]}" &
   child_pid=$!
   start_log_tail "${LOG_FILE}"
   set +e
