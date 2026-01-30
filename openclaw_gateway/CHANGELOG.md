@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.4
+
+- **Fix**: Onboarding UI now starts correctly.
+  - Read `port` from options before launching the onboarding server.
+  - Copy onboarding files into `REPO_DIR` so native modules (`node-pty`) can be loaded.
+
 ## 0.4.3
 
 - **Fix**: Apply Antigravity User-Agent patches AFTER `pnpm install` but BEFORE `pnpm build`.

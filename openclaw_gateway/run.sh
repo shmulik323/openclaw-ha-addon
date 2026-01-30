@@ -211,9 +211,18 @@ fi
 log "building control UI"
 pnpm ui:build
 
+# Read PORT early since we need it for onboarding if config is missing
+ONBOARD_PORT="$(jq -r .port /data/options.json 2>/dev/null || echo 18789)"
+if [ -z "${ONBOARD_PORT}" ] || [ "${ONBOARD_PORT}" = "null" ]; then
+  ONBOARD_PORT="18789"
+fi
+
 if [ ! -f "${OPENCLAW_CONFIG_PATH}" ]; then
-  log "openclaw.json missing; starting onboarding UI on port ${PORT}"
-  NODE_PATH="${REPO_DIR}/node_modules" node /onboarding.mjs "${PORT}"
+  log "openclaw.json missing; starting onboarding UI on port ${ONBOARD_PORT}"
+  # Copy onboarding files to repo so native modules (node-pty) can be loaded
+  cp /onboarding.mjs "${REPO_DIR}/onboarding.mjs"
+  cp /onboarding.html "${REPO_DIR}/onboarding.html"
+  node "${REPO_DIR}/onboarding.mjs" "${ONBOARD_PORT}"
 else
   log "config exists; skipping openclaw setup"
 fi
