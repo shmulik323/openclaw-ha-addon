@@ -273,7 +273,7 @@ else
   fi
 fi
 
-ARGS=(gateway "${ALLOW_UNCONFIGURED[@]}" --port "${PORT}")
+ARGS=(gateway "${ALLOW_UNCONFIGURED[@]}" --port "${PORT}" --host 0.0.0.0)
 if [ "${VERBOSE}" = "true" ]; then
   ARGS+=(--verbose)
 fi

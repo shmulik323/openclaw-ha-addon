@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.7
+
+- **Fix**: Gateway now binds to `0.0.0.0` instead of `127.0.0.1` so HA Ingress can reach it.
+
 ## 0.4.6
 
 - **Fix**: Replace `node-pty` with built-in `child_process` to avoid native module loading issues.
