@@ -1,23 +1,11 @@
 # Changelog
 
-## 0.4.4
+## 0.4.5
 
+- **Reverted**: Removed Antigravity User-Agent fix (did not work as expected).
 - **Fix**: Onboarding UI now starts correctly.
   - Read `port` from options before launching the onboarding server.
   - Copy onboarding files into `REPO_DIR` so native modules (`node-pty`) can be loaded.
-
-## 0.4.3
-
-- **Fix**: Apply Antigravity User-Agent patches AFTER `pnpm install` but BEFORE `pnpm build`.
-  - Previous versions applied patches at the wrong time in the startup sequence.
-  - Now patches are applied unconditionally every startup, ensuring the fix is always active.
-
-## 0.4.1
-
-- **Temporary Fix**: Patch Antigravity User-Agent header to fix "This version of Antigravity is no longer supported" error when using the `google-antigravity` provider.
-  - Applies the fix from OpenClaw PR #4603 during Docker build.
-  - Updates User-Agent to `antigravity/1.15.8 linux/arm64`.
-  - **Note**: This is a temporary workaround until the main OpenClaw project merges the fix upstream.
 
 ## 0.4.0
 

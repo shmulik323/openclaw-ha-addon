@@ -139,53 +139,29 @@ if [ -n "${BRANCH}" ]; then
   log "branch=${BRANCH}"
 fi
 
-# Use bundled pre-patched OpenClaw source from Docker image
-# This includes the Antigravity fix (PR #4603) to prevent "This version of Antigravity is no longer supported" error
-BUNDLED_SRC="/openclaw-src"
-USE_BUNDLED=false
-
-if [ -d "${BUNDLED_SRC}/.git" ]; then
-  USE_BUNDLED=true
-fi
-
 if [ ! -d "${REPO_DIR}/.git" ]; then
-  if [ "${USE_BUNDLED}" = "true" ]; then
-    log "copying bundled openclaw source (with Antigravity fix) -> ${REPO_DIR}"
-    rm -rf "${REPO_DIR}"
-    cp -a "${BUNDLED_SRC}" "${REPO_DIR}"
-    # Set remote URL for potential future updates
-    git -C "${REPO_DIR}" remote set-url origin "${REPO_URL}" 2>/dev/null || true
-    if [ -n "${BRANCH}" ]; then
-      git -C "${REPO_DIR}" checkout "${BRANCH}" 2>/dev/null || true
-    fi
+  log "cloning repo ${REPO_URL} -> ${REPO_DIR}"
+  rm -rf "${REPO_DIR}"
+  if [ -n "${BRANCH}" ]; then
+    git clone --branch "${BRANCH}" "${REPO_URL}" "${REPO_DIR}"
   else
-    log "cloning repo ${REPO_URL} -> ${REPO_DIR}"
-    rm -rf "${REPO_DIR}"
-    if [ -n "${BRANCH}" ]; then
-      git clone --branch "${BRANCH}" "${REPO_URL}" "${REPO_DIR}"
-    else
-      git clone "${REPO_URL}" "${REPO_DIR}"
-    fi
+    git clone "${REPO_URL}" "${REPO_DIR}"
   fi
 else
-  if [ "${USE_BUNDLED}" = "true" ]; then
-    log "using existing repo in ${REPO_DIR} (patches applied later)"
+  log "updating repo in ${REPO_DIR}"
+  git -C "${REPO_DIR}" remote set-url origin "${REPO_URL}"
+  git -C "${REPO_DIR}" fetch --prune
+  git -C "${REPO_DIR}" reset --hard
+  git -C "${REPO_DIR}" clean -fd
+  if [ -n "${BRANCH}" ]; then
+    git -C "${REPO_DIR}" checkout "${BRANCH}"
+    git -C "${REPO_DIR}" reset --hard "origin/${BRANCH}"
   else
-    log "updating repo in ${REPO_DIR}"
-    git -C "${REPO_DIR}" remote set-url origin "${REPO_URL}"
-    git -C "${REPO_DIR}" fetch --prune
-    git -C "${REPO_DIR}" reset --hard
-    git -C "${REPO_DIR}" clean -fd
-    if [ -n "${BRANCH}" ]; then
-      git -C "${REPO_DIR}" checkout "${BRANCH}"
-      git -C "${REPO_DIR}" reset --hard "origin/${BRANCH}"
-    else
-      DEFAULT_BRANCH=$(git -C "${REPO_DIR}" remote show origin | sed -n '/HEAD branch/s/.*: //p')
-      git -C "${REPO_DIR}" checkout "${DEFAULT_BRANCH}"
-      git -C "${REPO_DIR}" reset --hard "origin/${DEFAULT_BRANCH}"
-    fi
-    git -C "${REPO_DIR}" clean -fd
+    DEFAULT_BRANCH=$(git -C "${REPO_DIR}" remote show origin | sed -n '/HEAD branch/s/.*: //p')
+    git -C "${REPO_DIR}" checkout "${DEFAULT_BRANCH}"
+    git -C "${REPO_DIR}" reset --hard "origin/${DEFAULT_BRANCH}"
   fi
+  git -C "${REPO_DIR}" clean -fd
 fi
 
 cd "${REPO_DIR}"
@@ -193,14 +169,6 @@ cd "${REPO_DIR}"
 log "installing dependencies"
 pnpm config set confirmModulesPurge false >/dev/null 2>&1 || true
 pnpm install --no-frozen-lockfile --prefer-frozen-lockfile --prod=false
-
-# Apply Antigravity User-Agent fix AFTER install but BEFORE build
-# This is a temporary workaround until OpenClaw merges PR #4603 upstream
-log "applying Antigravity User-Agent fix (PR #4603)"
-sed -i 's|"User-Agent": "google-api-nodejs-client/9.15.1"|"User-Agent": "antigravity/1.15.8 linux/arm64"|g' \
-  "${REPO_DIR}/extensions/google-antigravity-auth/index.ts" 2>/dev/null || true
-sed -i 's|"User-Agent": "antigravity"|"User-Agent": "antigravity/1.15.8 linux/arm64"|g' \
-  "${REPO_DIR}/src/infra/provider-usage.fetch.antigravity.ts" 2>/dev/null || true
 
 log "building gateway"
 pnpm build
