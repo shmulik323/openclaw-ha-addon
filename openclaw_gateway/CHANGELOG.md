@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.6
+
+- **Fix**: Replace `node-pty` with built-in `child_process` to avoid native module loading issues.
+- **Fix**: Use compatible `import.meta.url` approach for ESM path resolution.
+- **Added**: Extensive logging in onboarding server for easier debugging.
+
 ## 0.4.5
 
 - **Reverted**: Removed Antigravity User-Agent fix (did not work as expected).

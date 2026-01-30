@@ -1,23 +1,35 @@
-import * as pty from '@lydell/node-pty';
+import { spawn } from 'child_process';
 import { WebSocketServer } from 'ws';
 import { createServer } from 'http';
 import { readFileSync, existsSync } from 'fs';
-import { join } from 'path';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const PORT = parseInt(process.argv[2] || '18789', 10);
 const STATE_DIR = process.env.OPENCLAW_STATE_DIR || '/config/openclaw/.openclaw';
 const CONFIG_PATH = process.env.OPENCLAW_CONFIG_PATH || join(STATE_DIR, 'openclaw.json');
 const REPO_DIR = '/config/openclaw/openclaw-src';
 
+console.log('[onboarding] Starting setup server...');
+console.log('[onboarding] PORT:', PORT);
+console.log('[onboarding] CONFIG_PATH:', CONFIG_PATH);
+console.log('[onboarding] REPO_DIR:', REPO_DIR);
+console.log('[onboarding] __dirname:', __dirname);
+
 let html;
 try {
-  html = readFileSync(join(import.meta.dirname, 'onboarding.html'), 'utf8');
+  html = readFileSync(join(__dirname, 'onboarding.html'), 'utf8');
+  console.log('[onboarding] Loaded onboarding.html successfully');
 } catch (err) {
   console.error('[onboarding] Failed to read onboarding.html:', err.message);
   process.exit(1);
 }
 
 const server = createServer((req, res) => {
+  console.log('[onboarding] HTTP request:', req.method, req.url);
+  
   if (req.url === '/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ status: existsSync(CONFIG_PATH) ? 'ready' : 'setup' }));
@@ -37,43 +49,64 @@ const server = createServer((req, res) => {
 const wss = new WebSocketServer({ server });
 
 wss.on('connection', (ws) => {
-  console.log('[onboarding] client connected');
-
-  let ptyProcess;
-  try {
-    ptyProcess = pty.spawn('bash', [], {
-      name: 'xterm-color',
-      cols: 80,
-      rows: 24,
-      cwd: REPO_DIR,
-      env: process.env
-    });
-  } catch (err) {
-    console.error('[onboarding] Failed to spawn PTY:', err.message);
-    ws.send(`\x1b[31mError: Failed to spawn terminal: ${err.message}\x1b[0m\r\n`);
-    ws.close();
-    return;
-  }
+  console.log('[onboarding] WebSocket client connected');
+  
+  let childProcess = null;
 
   ws.on('message', (data) => {
     const msg = data.toString();
+    console.log('[onboarding] Received message:', msg);
+    
     if (msg === 'START_ONBOARD') {
-      ptyProcess.write('node scripts/run-node.mjs onboard --install-daemon\n');
-    } else {
-      ptyProcess.write(msg);
+      if (childProcess) {
+        ws.send('\x1b[33mOnboarding already in progress...\x1b[0m\r\n');
+        return;
+      }
+      
+      ws.send('\x1b[36mStarting openclaw onboard...\x1b[0m\r\n');
+      
+      childProcess = spawn('node', ['scripts/run-node.mjs', 'onboard', '--install-daemon'], {
+        cwd: REPO_DIR,
+        env: { ...process.env, FORCE_COLOR: '1' },
+        shell: true
+      });
+
+      childProcess.stdout.on('data', (data) => {
+        ws.send(data.toString());
+      });
+
+      childProcess.stderr.on('data', (data) => {
+        ws.send(data.toString());
+      });
+
+      childProcess.on('close', (code) => {
+        ws.send(`\r\n\x1b[${code === 0 ? '32' : '31'}mProcess exited with code ${code}\x1b[0m\r\n`);
+        if (code === 0) {
+          ws.send('\x1b[32mOnboarding complete! The page will reload shortly...\x1b[0m\r\n');
+        }
+        childProcess = null;
+      });
+
+      childProcess.on('error', (err) => {
+        ws.send(`\x1b[31mError: ${err.message}\x1b[0m\r\n`);
+        childProcess = null;
+      });
     }
   });
 
-  ptyProcess.onData((data) => {
-    ws.send(data);
-  });
-
   ws.on('close', () => {
-    console.log('[onboarding] client disconnected');
-    ptyProcess.kill();
+    console.log('[onboarding] WebSocket client disconnected');
+    if (childProcess) {
+      childProcess.kill();
+    }
   });
 });
 
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`[onboarding] setup server listening on port ${PORT}`);
+  console.log(`[onboarding] Setup server listening on http://0.0.0.0:${PORT}`);
+});
+
+server.on('error', (err) => {
+  console.error('[onboarding] Server error:', err.message);
+  process.exit(1);
 });
