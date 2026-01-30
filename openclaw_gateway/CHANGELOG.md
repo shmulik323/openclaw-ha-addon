@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.1
+
+- Fix: CLI invocation now uses `node scripts/run-node.mjs` instead of `pnpm exec openclaw` to match how the openclaw monorepo runs its CLI.
+
 ## 0.3.0
 
 - BREAKING: Migrated from Clawdbot to OpenClaw (https://github.com/openclaw/openclaw)
