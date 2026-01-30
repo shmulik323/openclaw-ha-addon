@@ -232,6 +232,26 @@ ensure_insecure_auth() {
   " 2>/dev/null
 }
 
+ensure_trusted_proxies() {
+  node -e "
+    const fs=require('fs');
+    const JSON5=require('json5');
+    const p=process.env.OPENCLAW_CONFIG_PATH;
+    const raw=fs.readFileSync(p,'utf8');
+    const data=JSON5.parse(raw);
+    const gateway=data.gateway||{};
+    const proxies=gateway.trustedProxies||[];
+    if(!Array.isArray(proxies) || !proxies.includes('127.0.0.1')){
+      gateway.trustedProxies=['127.0.0.1','172.30.32.0/24'];
+      data.gateway=gateway;
+      fs.writeFileSync(p, JSON.stringify(data,null,2)+'\\n');
+      console.log('updated');
+    }else{
+      console.log('unchanged');
+    }
+  " 2>/dev/null
+}
+
 if [ -f "${OPENCLAW_CONFIG_PATH}" ]; then
   mode_status="$(ensure_gateway_mode || true)"
   if [ "${mode_status}" = "updated" ]; then
@@ -265,6 +285,16 @@ if [ -f "${OPENCLAW_CONFIG_PATH}" ]; then
     log "gateway.controlUi.allowInsecureAuth set to true (for Ingress)"
   elif [ "${auth_status}" = "unchanged" ]; then
     log "gateway.controlUi.allowInsecureAuth already set"
+  fi
+fi
+
+# Configure trusted proxies for nginx reverse proxy
+if [ -f "${OPENCLAW_CONFIG_PATH}" ]; then
+  proxy_status="$(ensure_trusted_proxies || true)"
+  if [ "${proxy_status}" = "updated" ]; then
+    log "gateway.trustedProxies set to [127.0.0.1, 172.30.32.0/24]"
+  elif [ "${proxy_status}" = "unchanged" ]; then
+    log "gateway.trustedProxies already set"
   fi
 fi
 

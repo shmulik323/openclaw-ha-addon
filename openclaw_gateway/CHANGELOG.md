@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.12
+
+- **Fix**: Auto-configure `gateway.trustedProxies` for nginx reverse proxy.
+  - The gateway was rejecting connections because it didn't trust nginx's proxy headers.
+  - Now trusts `127.0.0.1` and `172.30.32.0/24` (HA Supervisor network).
+
 ## 0.4.11
 
 - **Fix**: Auto-enable `gateway.controlUi.allowInsecureAuth: true` for HA Ingress.
