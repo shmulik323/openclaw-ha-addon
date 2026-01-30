@@ -48,7 +48,6 @@ if [ -d /root/workspace ] && [ ! -d "${WORKSPACE_DIR}" ]; then
 fi
 
 export HOME="${BASE_DIR}"
-export HOST="0.0.0.0"
 export OPENCLAW_STATE_DIR="${STATE_DIR}"
 export OPENCLAW_CONFIG_PATH="${STATE_DIR}/openclaw.json"
 
@@ -383,6 +382,11 @@ start_log_tail() {
 
 trap forward_usr1 USR1
 trap shutdown_child TERM INT
+
+# Start nginx as reverse proxy for HA Ingress (binds 0.0.0.0:8099 -> 127.0.0.1:18789)
+log "starting nginx reverse proxy for Ingress"
+rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
+nginx
 
 while true; do
   node scripts/run-node.mjs "${ARGS[@]}" &

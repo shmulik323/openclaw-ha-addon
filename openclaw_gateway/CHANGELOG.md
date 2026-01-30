@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.9
+
+- **Fix**: Add nginx reverse proxy to enable HA Ingress with `host_network: true`.
+  - nginx binds to `0.0.0.0:8099` and forwards to gateway on `127.0.0.1:18789`.
+  - `ingress_port` changed to 8099 to match nginx.
+  - Removed invalid `--host` flag and `HOST` env var (didn't work).
+
 ## 0.4.8
 
 - **Fix**: Use `HOST=0.0.0.0` environment variable instead of `--host` flag (which doesn't exist).

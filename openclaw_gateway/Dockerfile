@@ -20,6 +20,7 @@ RUN apt-get update \
   make \
   g++ \
   openssh-server \
+  nginx \
   && apt-get clean \
   && rm -rf /var/lib/apt/lists/*
 
@@ -55,6 +56,7 @@ WORKDIR /opt/openclaw
 
 COPY onboarding.mjs /onboarding.mjs
 COPY onboarding.html /onboarding.html
+COPY nginx.conf /etc/nginx/sites-enabled/openclaw.conf
 COPY run.sh /run.sh
 RUN chmod +x /run.sh
 

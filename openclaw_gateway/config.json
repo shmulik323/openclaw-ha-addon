@@ -1,6 +1,6 @@
 {
   "name": "OpenClaw Gateway",
-  "version": "0.4.8",
+  "version": "0.4.9",
   "slug": "openclaw_gateway",
   "description": "OpenClaw Gateway (SSH-tunneled, HA add-on)",
   "url": "https://github.com/shmulik323/openclaw-ha-addon",
@@ -10,7 +10,7 @@
   "boot": "auto",
   "host_network": true,
   "ingress": true,
-  "ingress_port": 18789,
+  "ingress_port": 8099,
   "panel": true,
   "hassio_api": false,
   "homeassistant_api": false,
