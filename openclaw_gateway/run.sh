@@ -51,6 +51,23 @@ export HOME="${BASE_DIR}"
 export OPENCLAW_STATE_DIR="${STATE_DIR}"
 export OPENCLAW_CONFIG_PATH="${STATE_DIR}/openclaw.json"
 
+# Home Assistant API integration
+# HA add-ons have access to the Supervisor API at http://supervisor/
+# and Home Assistant Core API at http://supervisor/core/api/
+export HA_URL="http://supervisor/core/api/"
+
+# Use user-provided token if set, otherwise try SUPERVISOR_TOKEN
+HA_TOKEN_OPT="$(jq -r '.ha_token // empty' /data/options.json 2>/dev/null || true)"
+if [ -n "${HA_TOKEN_OPT}" ] && [ "${HA_TOKEN_OPT}" != "null" ]; then
+  export HA_TOKEN="${HA_TOKEN_OPT}"
+  log "HA_TOKEN set from add-on options"
+elif [ -n "${SUPERVISOR_TOKEN:-}" ]; then
+  export HA_TOKEN="${SUPERVISOR_TOKEN}"
+  log "HA_TOKEN set from SUPERVISOR_TOKEN"
+else
+  log "HA_TOKEN not available (set ha_token in add-on config if needed)"
+fi
+
 log "config path=${OPENCLAW_CONFIG_PATH}"
 
 cat > /etc/profile.d/openclaw.sh <<EOF

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.13
+
+- **Feature**: Add Home Assistant API integration.
+  - Enable `hassio_api`, `homeassistant_api`, and `auth_api` for Supervisor access.
+  - Export `HA_URL` (http://supervisor/core/api) and `HA_TOKEN` env vars.
+  - Uses SUPERVISOR_TOKEN automatically, or user-provided `ha_token` option.
+  - OpenClaw can now interact with Home Assistant entities and services.
+
 ## 0.4.12
 
 - **Fix**: Auto-configure `gateway.trustedProxies` for nginx reverse proxy.
