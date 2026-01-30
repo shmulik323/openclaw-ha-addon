@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.4.21
+## 0.4.3
 
 - **Fix**: Apply Antigravity User-Agent patches AFTER `pnpm install` but BEFORE `pnpm build`.
   - Previous versions applied patches at the wrong time in the startup sequence.
