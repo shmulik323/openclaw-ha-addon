@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.8
+
+- **Fix**: Use `HOST=0.0.0.0` environment variable instead of `--host` flag (which doesn't exist).
+
 ## 0.4.7
 
 - **Fix**: Gateway now binds to `0.0.0.0` instead of `127.0.0.1` so HA Ingress can reach it.

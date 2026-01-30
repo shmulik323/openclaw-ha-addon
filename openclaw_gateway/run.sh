@@ -48,6 +48,7 @@ if [ -d /root/workspace ] && [ ! -d "${WORKSPACE_DIR}" ]; then
 fi
 
 export HOME="${BASE_DIR}"
+export HOST="0.0.0.0"
 export OPENCLAW_STATE_DIR="${STATE_DIR}"
 export OPENCLAW_CONFIG_PATH="${STATE_DIR}/openclaw.json"
 
@@ -273,7 +274,7 @@ else
   fi
 fi
 
-ARGS=(gateway "${ALLOW_UNCONFIGURED[@]}" --port "${PORT}" --host 0.0.0.0)
+ARGS=(gateway "${ALLOW_UNCONFIGURED[@]}" --port "${PORT}")
 if [ "${VERBOSE}" = "true" ]; then
   ARGS+=(--verbose)
 fi
