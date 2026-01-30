@@ -179,7 +179,7 @@ log "building control UI"
 pnpm ui:build
 
 if [ ! -f "${OPENCLAW_CONFIG_PATH}" ]; then
-  pnpm exec openclaw setup --workspace "${WORKSPACE_DIR}"
+  node scripts/run-node.mjs setup --workspace "${WORKSPACE_DIR}"
 else
   log "config exists; skipping openclaw setup"
 fi
@@ -373,7 +373,7 @@ trap forward_usr1 USR1
 trap shutdown_child TERM INT
 
 while true; do
-  pnpm exec openclaw "${ARGS[@]}" &
+  node scripts/run-node.mjs "${ARGS[@]}" &
   child_pid=$!
   start_log_tail "${LOG_FILE}"
   set +e
