@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.18
+
+- **Fix**: Make the ingress onboarding layout responsive and keep controls visible.
+  - Move the Start button and status into the terminal panel.
+  - Allow the page to scroll on smaller screens instead of clipping controls.
+  - Keep the terminal large without pushing the control bar out of view.
+
 ## 0.4.17
 
 - **Fix**: Expand and fit the ingress onboarding terminal to the available page size.

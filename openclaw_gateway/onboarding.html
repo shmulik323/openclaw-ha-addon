@@ -41,15 +41,16 @@
           BlinkMacSystemFont,
           sans-serif;
         margin: 0;
-        overflow: hidden;
+        overflow-x: hidden;
+        overflow-y: auto;
       }
       .container {
         box-sizing: border-box;
         width: 100vw;
         min-height: 100vh;
         padding: clamp(14px, 2vw, 28px);
-        display: grid;
-        grid-template-rows: auto auto minmax(0, 1fr) auto;
+        display: flex;
+        flex-direction: column;
         gap: 14px;
       }
       .hero {
@@ -89,8 +90,9 @@
         padding: 0.45rem 0.8rem;
       }
       .terminal-shell {
-        min-height: 0;
-        height: min(90vh, calc(100vh - 248px));
+        flex: 1 1 auto;
+        min-height: 70vh;
+        max-height: calc(100vh - 190px);
         background: var(--panel);
         border: 1px solid var(--panel-border);
         border-radius: 22px;
@@ -99,6 +101,14 @@
         display: flex;
         flex-direction: column;
         overflow: hidden;
+      }
+      .terminal-toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        flex-wrap: wrap;
+        padding: 0 2px 12px;
       }
       #terminal {
         flex: 1;
@@ -109,18 +119,6 @@
         padding: 12px;
         border: 1px solid rgba(255, 255, 255, 0.05);
         box-sizing: border-box;
-      }
-      .actions {
-        display: flex;
-        gap: 1rem;
-        align-items: center;
-        justify-content: space-between;
-        flex-wrap: wrap;
-        background: var(--surface);
-        border: 1px solid var(--surface-border);
-        border-radius: 18px;
-        box-shadow: var(--shadow);
-        padding: 14px 18px;
       }
       button {
         background: var(--primary);
@@ -150,6 +148,9 @@
         display: flex;
         align-items: center;
         gap: 0.7rem;
+        flex: 1 1 260px;
+        justify-content: flex-end;
+        min-height: 1.5rem;
       }
       .loader {
         display: inline-block;
@@ -171,13 +172,14 @@
       }
       @media (max-width: 800px) {
         .terminal-shell {
-          height: min(90vh, calc(100vh - 286px));
+          min-height: 62vh;
+          max-height: none;
         }
-        .actions {
+        .terminal-toolbar {
           align-items: stretch;
         }
-        button {
-          width: 100%;
+        .status {
+          justify-content: flex-start;
         }
       }
       @keyframes spin {
@@ -204,12 +206,11 @@
       </div>
 
       <div class="terminal-shell">
+        <div class="terminal-toolbar">
+          <button id="startBtn" disabled>Start Onboarding</button>
+          <div class="status" id="statusLine">Ready to start</div>
+        </div>
         <div id="terminal"></div>
-      </div>
-
-      <div class="actions">
-        <button id="startBtn" disabled>Start Onboarding</button>
-        <div class="status" id="statusLine">Ready to start</div>
       </div>
     </div>
 
