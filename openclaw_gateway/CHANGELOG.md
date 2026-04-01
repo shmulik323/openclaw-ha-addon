@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.16
+
+- **Fix**: Restore interactive input in ingress onboarding.
+  - Forward WebSocket keystrokes to the onboarding process after startup.
+  - Run onboarding inside a pseudo-terminal so interactive prompts behave correctly.
+  - Return keyboard focus to the terminal after pressing Start.
+
 ## 0.4.15
 
 - **Fix**: Use ingress-safe client URLs in the onboarding page.

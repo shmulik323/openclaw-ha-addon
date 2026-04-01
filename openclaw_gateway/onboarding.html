@@ -137,7 +137,11 @@
         cursorBlink: true,
       });
       term.open(document.getElementById("terminal"));
+      term.focus();
       term.writeln("\x1b[36mWaiting for connection...\x1b[0m");
+      document.getElementById("terminal").addEventListener("click", () => {
+        term.focus();
+      });
 
       const pageUrl = new URL(window.location.href);
       const basePath = pageUrl.pathname.endsWith("/")
@@ -205,6 +209,7 @@
         statusLine.innerHTML =
           '<span class="loader"></span>Running onboard command...';
         ws.send("START_ONBOARD");
+        term.focus();
       };
 
       async function checkReady() {

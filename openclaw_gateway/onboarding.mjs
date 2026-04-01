@@ -11,6 +11,7 @@ const PORT = parseInt(process.argv[2] || '18789', 10);
 const STATE_DIR = process.env.OPENCLAW_STATE_DIR || '/config/openclaw/.openclaw';
 const CONFIG_PATH = process.env.OPENCLAW_CONFIG_PATH || join(STATE_DIR, 'openclaw.json');
 const REPO_DIR = '/config/openclaw/openclaw-src';
+const ONBOARD_COMMAND = 'node scripts/run-node.mjs onboard --install-daemon';
 
 console.log('[onboarding] Starting setup server...');
 console.log('[onboarding] PORT:', PORT);
@@ -65,10 +66,14 @@ wss.on('connection', (ws) => {
       
       ws.send('\x1b[36mStarting openclaw onboard...\x1b[0m\r\n');
       
-      childProcess = spawn('node', ['scripts/run-node.mjs', 'onboard', '--install-daemon'], {
+      childProcess = spawn('script', ['-qefc', ONBOARD_COMMAND, '/dev/null'], {
         cwd: REPO_DIR,
-        env: { ...process.env, FORCE_COLOR: '1' },
-        shell: true
+        env: {
+          ...process.env,
+          FORCE_COLOR: '1',
+          TERM: process.env.TERM || 'xterm-256color',
+          COLORTERM: process.env.COLORTERM || 'truecolor'
+        }
       });
 
       childProcess.stdout.on('data', (data) => {
@@ -91,6 +96,11 @@ wss.on('connection', (ws) => {
         ws.send(`\x1b[31mError: ${err.message}\x1b[0m\r\n`);
         childProcess = null;
       });
+      return;
+    }
+
+    if (childProcess?.stdin?.writable) {
+      childProcess.stdin.write(data);
     }
   });
 
