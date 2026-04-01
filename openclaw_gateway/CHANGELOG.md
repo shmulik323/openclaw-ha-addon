@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.17
+
+- **Fix**: Expand and fit the ingress onboarding terminal to the available page size.
+  - Resize the xterm canvas to match the ingress viewport.
+  - Start onboarding with the fitted terminal rows and columns.
+  - Redesign the page so the terminal uses nearly the full width and about 90% of the height.
+
 ## 0.4.16
 
 - **Fix**: Restore interactive input in ingress onboarding.

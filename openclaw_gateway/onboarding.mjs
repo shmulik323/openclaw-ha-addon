@@ -11,7 +11,16 @@ const PORT = parseInt(process.argv[2] || '18789', 10);
 const STATE_DIR = process.env.OPENCLAW_STATE_DIR || '/config/openclaw/.openclaw';
 const CONFIG_PATH = process.env.OPENCLAW_CONFIG_PATH || join(STATE_DIR, 'openclaw.json');
 const REPO_DIR = '/config/openclaw/openclaw-src';
-const ONBOARD_COMMAND = 'node scripts/run-node.mjs onboard --install-daemon';
+
+function normalizeTerminalSize(inputCols, inputRows) {
+  const cols = Math.max(80, Math.min(240, Number.parseInt(inputCols || '160', 10) || 160));
+  const rows = Math.max(24, Math.min(80, Number.parseInt(inputRows || '48', 10) || 48));
+  return { cols, rows };
+}
+
+function buildOnboardCommand(cols, rows) {
+  return `sh -lc 'export COLUMNS=${cols} LINES=${rows}; stty cols ${cols} rows ${rows}; exec node scripts/run-node.mjs onboard --install-daemon'`;
+}
 
 console.log('[onboarding] Starting setup server...');
 console.log('[onboarding] PORT:', PORT);
@@ -53,20 +62,34 @@ wss.on('connection', (ws) => {
   console.log('[onboarding] WebSocket client connected');
   
   let childProcess = null;
+  let terminalSize = normalizeTerminalSize();
 
   ws.on('message', (data) => {
     const msg = data.toString();
-    console.log('[onboarding] Received message:', msg);
+    let control = null;
+    try {
+      control = JSON.parse(msg);
+    } catch {
+      control = null;
+    }
+
+    if (control?.type === 'resize') {
+      terminalSize = normalizeTerminalSize(control.cols, control.rows);
+      return;
+    }
     
-    if (msg === 'START_ONBOARD') {
+    if (control?.type === 'start' || msg === 'START_ONBOARD') {
       if (childProcess) {
         ws.send('\x1b[33mOnboarding already in progress...\x1b[0m\r\n');
         return;
       }
+
+      terminalSize = normalizeTerminalSize(control?.cols, control?.rows);
+      console.log('[onboarding] Starting interactive onboarding with size:', terminalSize);
       
       ws.send('\x1b[36mStarting openclaw onboard...\x1b[0m\r\n');
       
-      childProcess = spawn('script', ['-qefc', ONBOARD_COMMAND, '/dev/null'], {
+      childProcess = spawn('script', ['-qefc', buildOnboardCommand(terminalSize.cols, terminalSize.rows), '/dev/null'], {
         cwd: REPO_DIR,
         env: {
           ...process.env,

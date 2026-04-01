@@ -9,71 +9,131 @@
       href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css"
     />
     <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
     <style>
       :root {
-        --bg: #0f172a;
-        --surface: #1e293b;
-        --primary: #38bdf8;
-        --text: #f1f5f9;
-        --muted: #94a3b8;
+        --bg-top: #091124;
+        --bg-bottom: #101b31;
+        --surface: rgba(25, 36, 60, 0.92);
+        --surface-border: rgba(123, 151, 197, 0.16);
+        --panel: rgba(7, 12, 22, 0.92);
+        --panel-border: rgba(104, 170, 255, 0.18);
+        --primary: #46b3ff;
+        --accent: #97f0c6;
+        --text: #edf4ff;
+        --muted: #a9b8d1;
+        --danger: #ff8d8d;
+        --shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+      }
+      html,
+      body {
+        min-height: 100vh;
       }
       body {
-        background-color: var(--bg);
+        background:
+          radial-gradient(circle at top left, rgba(70, 179, 255, 0.14), transparent 28%),
+          radial-gradient(circle at bottom right, rgba(151, 240, 198, 0.12), transparent 24%),
+          linear-gradient(180deg, var(--bg-top), var(--bg-bottom));
         color: var(--text);
         font-family:
-          "Inter",
+          "IBM Plex Sans",
           -apple-system,
           BlinkMacSystemFont,
           sans-serif;
         margin: 0;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        height: 100vh;
         overflow: hidden;
       }
       .container {
-        width: 90%;
-        max-width: 800px;
+        box-sizing: border-box;
+        width: 100vw;
+        min-height: 100vh;
+        padding: clamp(14px, 2vw, 28px);
+        display: grid;
+        grid-template-rows: auto auto minmax(0, 1fr) auto;
+        gap: 14px;
+      }
+      .hero {
         background: var(--surface);
-        padding: 2rem;
-        border-radius: 1rem;
-        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-        border: 1px solid rgba(255, 255, 255, 0.1);
+        border: 1px solid var(--surface-border);
+        border-radius: 22px;
+        box-shadow: var(--shadow);
+        padding: clamp(18px, 2.2vw, 30px);
       }
       h1 {
         color: var(--primary);
         margin-top: 0;
         font-weight: 700;
         letter-spacing: -0.025em;
+        margin-bottom: 0.45rem;
+        font-size: clamp(2.1rem, 3vw, 3.4rem);
       }
       p {
         color: var(--muted);
         line-height: 1.5;
-        margin-bottom: 2rem;
+        margin: 0;
+        max-width: 1100px;
+        font-size: clamp(1.02rem, 1.25vw, 1.35rem);
+      }
+      .tips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        color: var(--muted);
+        font-size: 0.96rem;
+        padding: 0 2px;
+      }
+      .tip {
+        background: rgba(18, 28, 48, 0.76);
+        border: 1px solid rgba(151, 240, 198, 0.12);
+        border-radius: 999px;
+        padding: 0.45rem 0.8rem;
+      }
+      .terminal-shell {
+        min-height: 0;
+        height: min(90vh, calc(100vh - 248px));
+        background: var(--panel);
+        border: 1px solid var(--panel-border);
+        border-radius: 22px;
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), var(--shadow);
+        padding: 14px;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
       }
       #terminal {
-        height: 400px;
-        background: #000;
-        border-radius: 0.5rem;
-        padding: 1rem;
-        margin-bottom: 1.5rem;
+        flex: 1;
+        min-height: 0;
+        width: 100%;
+        background: #05080f;
+        border-radius: 14px;
+        padding: 12px;
         border: 1px solid rgba(255, 255, 255, 0.05);
+        box-sizing: border-box;
       }
       .actions {
         display: flex;
         gap: 1rem;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        background: var(--surface);
+        border: 1px solid var(--surface-border);
+        border-radius: 18px;
+        box-shadow: var(--shadow);
+        padding: 14px 18px;
       }
       button {
         background: var(--primary);
-        color: #000;
+        color: #04111f;
         border: none;
-        padding: 0.75rem 1.5rem;
-        border-radius: 0.5rem;
+        padding: 0.9rem 1.7rem;
+        border-radius: 0.9rem;
         font-weight: 600;
         cursor: pointer;
         transition: all 0.2s;
+        font-size: 1rem;
+        min-width: 220px;
+        box-shadow: 0 8px 30px rgba(70, 179, 255, 0.22);
       }
       button:hover {
         filter: brightness(1.1);
@@ -85,19 +145,40 @@
         transform: none;
       }
       .status {
-        font-size: 0.875rem;
+        font-size: 0.98rem;
         color: var(--muted);
-        margin-top: 1rem;
+        display: flex;
+        align-items: center;
+        gap: 0.7rem;
       }
       .loader {
         display: inline-block;
-        width: 1rem;
-        height: 1rem;
+        width: 1.1rem;
+        height: 1.1rem;
         border: 2px solid var(--muted);
         border-top-color: transparent;
         border-radius: 50%;
         animation: spin 1s linear infinite;
-        margin-right: 0.5rem;
+      }
+      .xterm-viewport {
+        scrollbar-width: thin;
+      }
+      .xterm {
+        height: 100%;
+      }
+      .xterm-screen {
+        width: 100% !important;
+      }
+      @media (max-width: 800px) {
+        .terminal-shell {
+          height: min(90vh, calc(100vh - 286px));
+        }
+        .actions {
+          align-items: stretch;
+        }
+        button {
+          width: 100%;
+        }
       }
       @keyframes spin {
         to {
@@ -108,38 +189,58 @@
   </head>
   <body>
     <div class="container">
-      <h1>OpenClaw Onboarding</h1>
-      <p>
-        Welcome to OpenClaw. This add-on requires a one-time setup to initialize
-        the daemon and workspace. Click the button below to start the
-        terminal-based setup.
-      </p>
+      <div class="hero">
+        <h1>OpenClaw Onboarding</h1>
+        <p>
+          Use the full-screen terminal below to complete first-run setup. Once
+          onboarding starts, the wizard takes over the whole terminal surface.
+        </p>
+      </div>
 
-      <div id="terminal"></div>
+      <div class="tips">
+        <div class="tip">Click inside the terminal if keyboard focus is lost</div>
+        <div class="tip">Use arrow keys, Tab, and Enter to move through prompts</div>
+        <div class="tip">The terminal will use almost the full ingress page</div>
+      </div>
+
+      <div class="terminal-shell">
+        <div id="terminal"></div>
+      </div>
 
       <div class="actions">
         <button id="startBtn" disabled>Start Onboarding</button>
-        <button id="launchBtn" style="display: none">Launch OpenClaw</button>
+        <div class="status" id="statusLine">Ready to start</div>
       </div>
-      <div class="status" id="statusLine">Ready to start</div>
     </div>
 
     <script>
       const startBtn = document.getElementById("startBtn");
       const statusLine = document.getElementById("statusLine");
+      const terminalHost = document.getElementById("terminal");
       const term = new Terminal({
         theme: {
-          background: "#0a0a0a",
-          foreground: "#f1f5f9",
+          background: "#05080f",
+          foreground: "#edf4ff",
+          cursor: "#46b3ff",
+          selectionBackground: "rgba(70, 179, 255, 0.28)",
+          black: "#05080f",
+          brightBlack: "#7e8ca6"
         },
-        fontFamily: "JetBrains Mono, monospace",
-        fontSize: 14,
+        fontFamily: '"IBM Plex Mono", "JetBrains Mono", monospace',
+        fontSize: 17,
+        lineHeight: 1.24,
+        letterSpacing: 0.2,
         cursorBlink: true,
+        convertEol: true,
+        scrollback: 5000,
+        allowTransparency: true
       });
-      term.open(document.getElementById("terminal"));
+      const fitAddon = new FitAddon.FitAddon();
+      term.loadAddon(fitAddon);
+      term.open(terminalHost);
       term.focus();
       term.writeln("\x1b[36mWaiting for connection...\x1b[0m");
-      document.getElementById("terminal").addEventListener("click", () => {
+      terminalHost.addEventListener("click", () => {
         term.focus();
       });
 
@@ -154,13 +255,41 @@
       wsUrl.protocol = wsUrl.protocol === "https:" ? "wss:" : "ws:";
 
       let ws;
+      let fitTimer = null;
+
+      function renderStatus(text, loading = false) {
+        statusLine.innerHTML = loading
+          ? `<span class="loader"></span>${text}`
+          : text;
+      }
+
+      function sendResize() {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(
+            JSON.stringify({
+              type: "resize",
+              cols: term.cols,
+              rows: term.rows,
+            }),
+          );
+        }
+      }
+
+      function fitTerminal() {
+        clearTimeout(fitTimer);
+        fitTimer = setTimeout(() => {
+          fitAddon.fit();
+          sendResize();
+        }, 30);
+      }
 
       function connect() {
         ws = new WebSocket(wsUrl.toString());
 
         ws.onopen = () => {
           startBtn.disabled = false;
-          statusLine.innerText = "Ready to start";
+          renderStatus("Ready to start");
+          fitTerminal();
           term.writeln("\x1b[32mConnected to setup server.\x1b[0m");
           term.writeln(
             "Press the button to run openclaw onboard --install-daemon",
@@ -179,8 +308,9 @@
 
         ws.onerror = () => {
           startBtn.disabled = true;
-          statusLine.innerText =
-            "Could not connect to the onboarding server. Reload the add-on page.";
+          renderStatus(
+            "Could not connect to the onboarding server. Reload the add-on page.",
+          );
           term.writeln(
             "\r\n\x1b[31mWebSocket connection failed. Reload the add-on page.\x1b[0m",
           );
@@ -192,6 +322,12 @@
       }
 
       connect();
+      fitTerminal();
+      window.addEventListener("resize", fitTerminal);
+      if (typeof ResizeObserver !== "undefined") {
+        const observer = new ResizeObserver(() => fitTerminal());
+        observer.observe(terminalHost);
+      }
 
       term.onData((data) => {
         if (ws && ws.readyState === WebSocket.OPEN) {
@@ -201,14 +337,21 @@
 
       startBtn.onclick = () => {
         if (!ws || ws.readyState !== WebSocket.OPEN) {
-          statusLine.innerText =
-            "The onboarding connection is not ready. Reload the add-on page.";
+          renderStatus(
+            "The onboarding connection is not ready. Reload the add-on page.",
+          );
           return;
         }
         startBtn.disabled = true;
-        statusLine.innerHTML =
-          '<span class="loader"></span>Running onboard command...';
-        ws.send("START_ONBOARD");
+        fitTerminal();
+        renderStatus("Running onboard command...", true);
+        ws.send(
+          JSON.stringify({
+            type: "start",
+            cols: term.cols,
+            rows: term.rows,
+          }),
+        );
         term.focus();
       };
 
@@ -218,8 +361,7 @@
           const data = await res.json();
           if (data.status === "ready") {
             startBtn.style.display = "none";
-            statusLine.innerText =
-              "Setup complete. Waiting for OpenClaw to start...";
+            renderStatus("Setup complete. Waiting for OpenClaw to start...");
 
             await fetch(shutdownUrl, { cache: "no-store" });
 
