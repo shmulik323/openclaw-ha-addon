@@ -5,7 +5,7 @@ log() {
   printf "[addon] %s\n" "$*"
 }
 
-log "run.sh version=2026-04-02-pnpm-path-fix"
+log "run.sh version=2026-04-02-ingress-control-ui-frame-fix"
 
 BASE_DIR=/config/openclaw
 STATE_DIR="${BASE_DIR}/.openclaw"

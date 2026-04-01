@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.20
+
+- **Fix**: Allow the OpenClaw Control UI to render inside Home Assistant ingress after onboarding.
+  - Strip the upstream `X-Frame-Options: DENY` response on the ingress proxy only.
+  - Replace the upstream `frame-ancestors 'none'` CSP with an iframe-safe ingress policy.
+  - Keep the upstream gateway process unchanged outside the Home Assistant ingress path.
+
 ## 0.4.19
 
 - **Fix**: Ensure `pnpm` global installs work during onboarding and runtime.

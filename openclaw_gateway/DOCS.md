@@ -44,6 +44,10 @@ The add-on performs these steps on startup:
 5. Ensures `gateway.mode=local` if missing
 6. Starts the gateway
 
+After onboarding exits, the same ingress panel proxies the OpenClaw Control UI.
+The add-on strips the upstream anti-framing headers on the ingress proxy only so
+Home Assistant can keep rendering the Control UI inside its iframe-based add-on panel.
+
 ### OpenClaw Configuration
 
 #### Recommended: Home Assistant ingress onboarding
@@ -117,6 +121,12 @@ Ensure `ssh_authorized_keys` is set in the add-on options with your public key.
 
 Open the add-on from Home Assistant, not by browsing directly to port `8099`.
 The ingress listener is intended for Home Assistant's internal proxy only.
+
+### Onboarding finishes but the Control UI stays blank
+
+The Control UI must be rendered through the Home Assistant add-on panel, not by
+connecting directly to the internal ingress port. If the panel still stays blank,
+confirm the add-on log shows the latest `run.sh version=` line after updating.
 
 ### Gateway won't start
 

@@ -6,6 +6,7 @@ Run [OpenClaw](https://github.com/openclaw/openclaw) on Home Assistant OS with H
 
 - 🦞 **OpenClaw Gateway** — AI agent with messaging, automation, and more
 - 🧭 **Ingress Onboarding** — Complete first-run setup from the add-on panel
+- 🖥️ **Ingress Control UI** — Continue into the OpenClaw web UI from the same add-on panel
 - 🔒 **SSH Tunnel** — Optional secure remote access for OpenClaw.app or CLI
 - 📦 **Persistent Storage** — All data survives add-on updates
 - 🛠️ **Included Tools** — gog (Google Workspace), gh (GitHub), hass-cli
