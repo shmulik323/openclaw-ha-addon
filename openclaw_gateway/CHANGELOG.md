@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.19
+
+- **Fix**: Ensure `pnpm` global installs work during onboarding and runtime.
+  - Put `/pnpm` on the image `PATH`.
+  - Export `PNPM_HOME` and `/pnpm` from the add-on runtime before onboarding starts.
+  - Reapply `pnpm`'s global bin directory in the runtime environment.
+
 ## 0.4.18
 
 - **Fix**: Make the ingress onboarding layout responsive and keep controls visible.

@@ -5,15 +5,17 @@ log() {
   printf "[addon] %s\n" "$*"
 }
 
-log "run.sh version=2026-04-02-ingress-onboarding-layout-fix"
+log "run.sh version=2026-04-02-pnpm-path-fix"
 
 BASE_DIR=/config/openclaw
 STATE_DIR="${BASE_DIR}/.openclaw"
 REPO_DIR="${BASE_DIR}/openclaw-src"
 WORKSPACE_DIR="${BASE_DIR}/workspace"
 SSH_AUTH_DIR="${BASE_DIR}/.ssh"
+BUN_INSTALL="${BUN_INSTALL:-/usr/local/bun}"
+PNPM_HOME="${PNPM_HOME:-/pnpm}"
 
-mkdir -p "${BASE_DIR}" "${STATE_DIR}" "${WORKSPACE_DIR}" "${SSH_AUTH_DIR}"
+mkdir -p "${BASE_DIR}" "${STATE_DIR}" "${WORKSPACE_DIR}" "${SSH_AUTH_DIR}" "${PNPM_HOME}"
 
 # Create persistent directories
 mkdir -p "${BASE_DIR}/.config/gh" "${BASE_DIR}/.local" "${BASE_DIR}/.cache" "${BASE_DIR}/.npm" "${BASE_DIR}/bin"
@@ -48,6 +50,9 @@ if [ -d /root/workspace ] && [ ! -d "${WORKSPACE_DIR}" ]; then
 fi
 
 export HOME="${BASE_DIR}"
+export BUN_INSTALL="${BUN_INSTALL}"
+export PNPM_HOME="${PNPM_HOME}"
+export PATH="${BASE_DIR}/bin:${BUN_INSTALL}/bin:${PNPM_HOME}:${PATH}"
 export OPENCLAW_STATE_DIR="${STATE_DIR}"
 export OPENCLAW_CONFIG_PATH="${STATE_DIR}/openclaw.json"
 
@@ -73,13 +78,17 @@ log "config path=${OPENCLAW_CONFIG_PATH}"
 cat > /etc/profile.d/openclaw.sh <<EOF
 export HOME="${BASE_DIR}"
 export GH_CONFIG_DIR="${BASE_DIR}/.config/gh"
-export PATH="${BASE_DIR}/bin:\${PATH}"
+export BUN_INSTALL="${BUN_INSTALL}"
+export PNPM_HOME="${PNPM_HOME}"
+export PATH="${BASE_DIR}/bin:${BUN_INSTALL}/bin:${PNPM_HOME}:\${PATH}"
 if [ -n "\${SSH_CONNECTION:-}" ]; then
   export OPENCLAW_STATE_DIR="${STATE_DIR}"
   export OPENCLAW_CONFIG_PATH="${STATE_DIR}/openclaw.json"
   cd "${REPO_DIR}" 2>/dev/null || true
 fi
 EOF
+
+pnpm config set global-bin-dir "${PNPM_HOME}" >/dev/null 2>&1 || true
 
 auth_from_opts() {
   local val

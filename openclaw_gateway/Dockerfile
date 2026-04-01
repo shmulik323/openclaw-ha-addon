@@ -34,7 +34,7 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | d
 
 ENV BUN_INSTALL=/usr/local/bun
 ENV PNPM_HOME=/pnpm
-ENV PATH="${BUN_INSTALL}/bin:${PNPM_HOME}:${PATH}"
+ENV PATH="/usr/local/bun/bin:/pnpm:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
 RUN curl -fsSL https://bun.sh/install | bash
 
