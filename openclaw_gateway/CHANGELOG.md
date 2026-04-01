@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.15
+
+- **Fix**: Use ingress-safe client URLs in the onboarding page.
+  - Open the WebSocket on the current ingress path instead of the Home Assistant root.
+  - Call onboarding health and shutdown endpoints through the ingress path.
+  - Keep the Start button disabled until the onboarding socket is actually connected.
+
 ## 0.4.14
 
 - **Fix**: Make first-run onboarding available through Home Assistant ingress.

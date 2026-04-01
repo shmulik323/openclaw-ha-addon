@@ -118,13 +118,15 @@
       <div id="terminal"></div>
 
       <div class="actions">
-        <button id="startBtn">Start Onboarding</button>
+        <button id="startBtn" disabled>Start Onboarding</button>
         <button id="launchBtn" style="display: none">Launch OpenClaw</button>
       </div>
       <div class="status" id="statusLine">Ready to start</div>
     </div>
 
     <script>
+      const startBtn = document.getElementById("startBtn");
+      const statusLine = document.getElementById("statusLine");
       const term = new Terminal({
         theme: {
           background: "#0a0a0a",
@@ -137,69 +139,106 @@
       term.open(document.getElementById("terminal"));
       term.writeln("\x1b[36mWaiting for connection...\x1b[0m");
 
-      const protocol = location.protocol === "https:" ? "wss:" : "ws:";
-      const ws = new WebSocket(`${protocol}//${location.host}`);
+      const pageUrl = new URL(window.location.href);
+      const basePath = pageUrl.pathname.endsWith("/")
+        ? pageUrl.pathname
+        : `${pageUrl.pathname}/`;
+      const baseUrl = new URL(basePath, pageUrl.origin);
+      const healthUrl = new URL("health", baseUrl);
+      const shutdownUrl = new URL("shutdown", baseUrl);
+      const wsUrl = new URL(baseUrl);
+      wsUrl.protocol = wsUrl.protocol === "https:" ? "wss:" : "ws:";
 
-      ws.onopen = () => {
-        term.writeln("\x1b[32mConnected to setup server.\x1b[0m");
-        term.writeln(
-          "Press the button to run openclaw onboard --install-daemon",
-        );
-      };
+      let ws;
 
-      ws.onmessage = (e) => {
-        term.write(e.data);
-        if (
-          e.data.includes("Setup complete!") ||
-          e.data.includes("Initialization complete")
-        ) {
-          checkReady();
-        }
-      };
+      function connect() {
+        ws = new WebSocket(wsUrl.toString());
+
+        ws.onopen = () => {
+          startBtn.disabled = false;
+          statusLine.innerText = "Ready to start";
+          term.writeln("\x1b[32mConnected to setup server.\x1b[0m");
+          term.writeln(
+            "Press the button to run openclaw onboard --install-daemon",
+          );
+        };
+
+        ws.onmessage = (e) => {
+          term.write(e.data);
+          if (
+            e.data.includes("Onboarding complete!") ||
+            e.data.includes("Initialization complete")
+          ) {
+            checkReady();
+          }
+        };
+
+        ws.onerror = () => {
+          startBtn.disabled = true;
+          statusLine.innerText =
+            "Could not connect to the onboarding server. Reload the add-on page.";
+          term.writeln(
+            "\r\n\x1b[31mWebSocket connection failed. Reload the add-on page.\x1b[0m",
+          );
+        };
+
+        ws.onclose = () => {
+          startBtn.disabled = true;
+        };
+      }
+
+      connect();
 
       term.onData((data) => {
-        ws.send(data);
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(data);
+        }
       });
 
-      document.getElementById("startBtn").onclick = () => {
-        document.getElementById("startBtn").disabled = true;
-        document.getElementById("statusLine").innerHTML =
+      startBtn.onclick = () => {
+        if (!ws || ws.readyState !== WebSocket.OPEN) {
+          statusLine.innerText =
+            "The onboarding connection is not ready. Reload the add-on page.";
+          return;
+        }
+        startBtn.disabled = true;
+        statusLine.innerHTML =
           '<span class="loader"></span>Running onboard command...';
         ws.send("START_ONBOARD");
       };
 
-        async function checkReady() {
-            try {
-                const res = await fetch('/health');
-                const data = await res.json();
-                if (data.status === 'ready') {
-                    document.getElementById('startBtn').style.display = 'none';
-                    document.getElementById('statusLine').innerText = 'Setup complete! Transitioning to OpenClaw...';
-                    
-                    // Signal server to shutdown so run.sh can proceed
-                    await fetch('/shutdown');
+      async function checkReady() {
+        try {
+          const res = await fetch(healthUrl, { cache: "no-store" });
+          const data = await res.json();
+          if (data.status === "ready") {
+            startBtn.style.display = "none";
+            statusLine.innerText =
+              "Setup complete. Waiting for OpenClaw to start...";
 
-                    // Polling for the real gateway to be live
-                    const pollGateway = async () => {
-                        try {
-                            const res = await fetch('/health'); // The real gateway should also have /health eventually, or just check 200
-                            if (res.status === 200) {
-                                location.reload();
-                            } else {
-                                setTimeout(pollGateway, 1000);
-                            }
-                        } catch (e) {
-                            setTimeout(pollGateway, 1000);
-                        }
-                    };
-                    setTimeout(pollGateway, 2000);
-                } else {
-                    setTimeout(checkReady, 2000);
+            await fetch(shutdownUrl, { cache: "no-store" });
+
+            const pollGateway = async () => {
+              try {
+                const res = await fetch(baseUrl, { cache: "no-store" });
+                if (res.ok || res.status === 401 || res.status === 302) {
+                  location.reload();
+                  return;
                 }
-            } catch (e) {
-                setTimeout(checkReady, 2000);
-            }
+              } catch (e) {
+                // The onboarding server exits before the gateway is ready.
+              }
+              setTimeout(pollGateway, 1500);
+            };
+
+            setTimeout(pollGateway, 2000);
+            return;
+          }
+        } catch (e) {
+          // Retry until onboarding writes the config or the gateway comes up.
         }
+        setTimeout(checkReady, 2000);
+      }
     </script>
   </body>
 </html>

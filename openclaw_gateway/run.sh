@@ -5,7 +5,7 @@ log() {
   printf "[addon] %s\n" "$*"
 }
 
-log "run.sh version=2026-04-02-ingress-onboarding"
+log "run.sh version=2026-04-02-ingress-onboarding-ws-fix"
 
 BASE_DIR=/config/openclaw
 STATE_DIR="${BASE_DIR}/.openclaw"
