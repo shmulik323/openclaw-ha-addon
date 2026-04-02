@@ -8,6 +8,7 @@ Run [OpenClaw](https://github.com/openclaw/openclaw) on Home Assistant OS with H
 - 🧭 **Ingress Onboarding** — Complete first-run setup from the add-on panel
 - 🖥️ **Ingress Control UI** — Continue into the OpenClaw web UI from the same add-on panel
 - 🔑 **Auto Token Bootstrap** — Ingress injects the generated gateway token on first dashboard load
+- 🔓 **Ingress Device-Auth Bypass** — Token auth stays on, but per-device browser pairing is disabled for the ingress UI
 - 🔒 **SSH Tunnel** — Optional secure remote access for OpenClaw.app or CLI
 - 📦 **Persistent Storage** — All data survives add-on updates
 - 🛠️ **Included Tools** — gog (Google Workspace), gh (GitHub), hass-cli

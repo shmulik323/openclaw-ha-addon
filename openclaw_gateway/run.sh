@@ -5,7 +5,7 @@ log() {
   printf "[addon] %s\n" "$*"
 }
 
-log "run.sh version=2026-04-02-ingress-control-ui-connect-fix"
+log "run.sh version=2026-04-02-ingress-control-ui-device-auth-fix"
 
 BASE_DIR=/config/openclaw
 STATE_DIR="${BASE_DIR}/.openclaw"
@@ -316,6 +316,27 @@ ensure_insecure_auth() {
   " 2>/dev/null
 }
 
+ensure_disable_device_auth() {
+  node -e "
+    const fs=require('fs');
+    const JSON5=require('json5');
+    const p=process.env.OPENCLAW_CONFIG_PATH;
+    const raw=fs.readFileSync(p,'utf8');
+    const data=JSON5.parse(raw);
+    const gateway=data.gateway||{};
+    const controlUi=gateway.controlUi||{};
+    if(controlUi.dangerouslyDisableDeviceAuth!==true){
+      controlUi.dangerouslyDisableDeviceAuth=true;
+      gateway.controlUi=controlUi;
+      data.gateway=gateway;
+      fs.writeFileSync(p, JSON.stringify(data,null,2)+'\\n');
+      console.log('updated');
+    }else{
+      console.log('unchanged');
+    }
+  " 2>/dev/null
+}
+
 ensure_trusted_proxies() {
   node -e "
     const fs=require('fs');
@@ -415,6 +436,19 @@ if [ -f "${OPENCLAW_CONFIG_PATH}" ]; then
     log "gateway.controlUi.allowInsecureAuth set to true (for Ingress)"
   elif [ "${auth_status}" = "unchanged" ]; then
     log "gateway.controlUi.allowInsecureAuth already set"
+  fi
+fi
+
+# Disable device-identity enforcement for the HA ingress Control UI.
+# OpenClaw only treats allowInsecureAuth as a localhost-only bypass, so normal
+# browser sessions through Home Assistant still need the explicit break-glass
+# flag to connect with token auth.
+if [ -f "${OPENCLAW_CONFIG_PATH}" ]; then
+  device_auth_status="$(ensure_disable_device_auth || true)"
+  if [ "${device_auth_status}" = "updated" ]; then
+    log "gateway.controlUi.dangerouslyDisableDeviceAuth set to true (for Ingress)"
+  elif [ "${device_auth_status}" = "unchanged" ]; then
+    log "gateway.controlUi.dangerouslyDisableDeviceAuth already set"
   fi
 fi
 

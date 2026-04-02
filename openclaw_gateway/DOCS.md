@@ -49,6 +49,10 @@ The add-on strips the upstream anti-framing headers on the ingress proxy only so
 Home Assistant can keep rendering the Control UI inside its iframe-based add-on panel.
 It also injects the generated gateway token into the URL fragment on first load so
 the dashboard can connect without manual token entry after onboarding.
+To make browser access through Home Assistant ingress actually connect, the add-on
+also enables `gateway.controlUi.dangerouslyDisableDeviceAuth=true`. Token auth remains
+enabled, but OpenClaw's per-device browser pairing/device-identity checks are bypassed
+for this ingress-driven deployment model.
 
 ### OpenClaw Configuration
 

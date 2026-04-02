@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.22
+
+- **Fix**: Disable Control UI device-identity enforcement for Home Assistant ingress sessions.
+  - Set `gateway.controlUi.dangerouslyDisableDeviceAuth=true` during add-on startup.
+  - Keep token auth enabled while bypassing OpenClaw's non-local browser pairing/device checks.
+  - Preserve the ingress host/origin compatibility work from `0.4.21`.
+
 ## 0.4.21
 
 - **Fix**: Make the ingress Control UI connect automatically after onboarding.
