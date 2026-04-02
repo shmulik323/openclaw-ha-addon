@@ -326,6 +326,7 @@ function reconcileConfig(configPath, optionsPath, haOriginsJson) {
 
     gateway.auth = gatewayAuth;
     gateway.controlUi = controlUi;
+    gatewayNodes.browser = browserNode;
     gateway.nodes = gatewayNodes;
     data.gateway = gateway;
     data.logging = logging;
