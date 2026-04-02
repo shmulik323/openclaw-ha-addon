@@ -1,13 +1,13 @@
 # Changelog
 
-## 0.5.4
+## 0.5.5
 
 - **Fix**: Treat Linux SIGUSR1 shutdown as exit status **138** (128+10), not 129 (SIGHUP), so config hot-reload no longer looks like a crash and avoids the “fallback restart” path.
 - **Fix**: On reload, send SIGUSR1 to both the supervised `node` child and its children so the gateway tree gets a consistent signal.
 - **Fix**: Before restarting the gateway after a prior cycle, run `openclaw gateway stop` (`node scripts/run-node.mjs gateway stop`) so a stale listener cannot keep port `18789` and block the next start.
 - **Tweak**: Extend the initial gateway `/healthz` wait window to 90s to reduce false “not ready” logs on slow starts.
 
-## 0.5.3
+## 0.5.3/4
 
 - **Fix**: Ship Google Gemini CLI (`gemini`, `@google/gemini-cli`) globally so OpenClaw onboarding can use “Gemini CLI OAuth” inside the container.
 - **Fix**: Strip `node-linker` from the cloned repo `.npmrc` more defensively (optional whitespace, CRLF) so `npm exec` under `openclaw-src` stops warning after add-on sync.
