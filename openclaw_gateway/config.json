@@ -1,6 +1,6 @@
 {
   "name": "OpenClaw Gateway",
-  "version": "0.5.3",
+  "version": "0.5.4",
   "slug": "openclaw_gateway",
   "description": "OpenClaw Gateway with Home Assistant ingress onboarding",
   "url": "https://github.com/shmulik323/openclaw-ha-addon",

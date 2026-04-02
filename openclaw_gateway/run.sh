@@ -5,7 +5,7 @@ log() {
   printf "[addon] %s\n" "$*"
 }
 
-log "run.sh version=2026-04-03-path-pnpm-local-bin"
+log "run.sh version=2026-04-03-sigusr1-reload-port-teardown"
 
 BASE_DIR=/config/openclaw
 STATE_DIR="${BASE_DIR}/.openclaw"
@@ -551,13 +551,23 @@ start_log_tail() {
 
 wait_for_gateway_ready() {
   local attempt
-  for attempt in $(seq 1 60); do
+  for attempt in $(seq 1 90); do
     if curl -fsS "http://127.0.0.1:${PORT}/healthz" >/dev/null 2>&1; then
       return 0
     fi
     sleep 1
   done
   return 1
+}
+
+# Ask OpenClaw to release the gateway port before we spawn again (covers reload races where
+# the supervised node exited but a worker still held 18789).
+request_gateway_listener_teardown() {
+  (
+    cd "${REPO_DIR}" || exit 0
+    timeout 40s node scripts/run-node.mjs gateway stop 2>/dev/null
+  ) || true
+  sleep 1
 }
 
 validate_local_browser_runtime() {
@@ -619,10 +629,11 @@ prepare_reload_request() {
   write_runtime_status
 
   if [ -n "${child_pid}" ]; then
-    if ! pkill -USR1 -P "${child_pid}" 2>/dev/null; then
-      kill -USR1 "${child_pid}" 2>/dev/null || true
-    fi
-    log "forwarded SIGUSR1 to gateway process (reason=${LAST_RELOAD_REASON})"
+    # Signal the full tree: if we only signal the node parent when a child exists, the child
+    # can handle USR1 while the parent never gets a clean shutdown signal.
+    pkill -USR1 -P "${child_pid}" 2>/dev/null || true
+    kill -USR1 "${child_pid}" 2>/dev/null || true
+    log "forwarded SIGUSR1 to gateway process tree (reason=${LAST_RELOAD_REASON})"
   else
     log "reload requested with no active gateway child (reason=${LAST_RELOAD_REASON})"
   fi
@@ -693,7 +704,9 @@ watcher_pid=$!
 
 export OPENCLAW_NO_RESPAWN=1
 
+gateway_supervisor_cycle=0
 while true; do
+  gateway_supervisor_cycle=$((gateway_supervisor_cycle + 1))
   apply_runtime_reconciliation
   refresh_ingress_surfaces
   compute_gateway_args
@@ -703,6 +716,10 @@ while true; do
 
   child_pid=""
   write_runtime_status
+
+  if [ "${gateway_supervisor_cycle}" -gt 1 ]; then
+    request_gateway_listener_teardown
+  fi
 
   node scripts/run-node.mjs "${ARGS[@]}" &
   child_pid=$!
@@ -742,11 +759,14 @@ while true; do
     break
   fi
 
-  if [ "${status}" -eq 129 ]; then
+  # Linux: SIGUSR1 is signal 10 → wait status 128+10=138. (129 is SIGHUP, not SIGUSR1.)
+  if [ "${status}" -eq 138 ] || [ "${status}" -eq 129 ]; then
     child_pid=""
     BROWSER_RUNTIME_ACTIVE="false"
+    LAST_RELOAD_RESULT="success"
+    LAST_RELOAD_ERROR=""
     write_runtime_status
-    log "gateway exited after SIGUSR1; restarting"
+    log "gateway exited after reload signal (status=${status}); restarting"
     continue
   fi
 

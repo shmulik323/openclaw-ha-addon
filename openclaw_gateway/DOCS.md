@@ -267,6 +267,10 @@ Remember:
 - `browser.noSandbox=true` is a container-specific compatibility setting here
 - `node_host` remains the default browser mode
 
+### “Port 18789 is already in use” / “gateway already running” after a config reload
+
+The add-on signals the live gateway for hot reload when `openclaw.json` changes. If you still see this on an older add-on build, upgrade to the current image: the supervisor now treats Linux SIGUSR1 exits correctly and runs `gateway stop` before starting a new listener so the port is not left stuck.
+
 ### Gateway does not start
 
 Check logs:
