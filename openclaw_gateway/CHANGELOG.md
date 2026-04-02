@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.1
+
+- **Fix**: Persist `gateway.nodes.browser.mode=auto` correctly in `node_host` mode.
+  - Prevent repeated reconcile writes for the same browser node-host setting on every startup.
+  - Keep `node_host` mode stable without noisy `config reconcile: gateway.nodes.browser.mode=auto` log lines after the first persisted write.
+
 ## 0.5.0
 
 - **Feature**: Make the add-on the canonical Gateway supervisor and config reload path.
