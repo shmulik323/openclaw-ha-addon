@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>OpenClaw Onboarding</title>
+    <title>OpenClaw Terminal</title>
     <link
       rel="stylesheet"
       href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css"
@@ -19,10 +19,8 @@
         --panel: rgba(7, 12, 22, 0.92);
         --panel-border: rgba(104, 170, 255, 0.18);
         --primary: #46b3ff;
-        --accent: #97f0c6;
         --text: #edf4ff;
         --muted: #a9b8d1;
-        --danger: #ff8d8d;
         --shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
       }
       html,
@@ -192,22 +190,15 @@
   <body>
     <div class="container">
       <div class="hero">
-        <h1>OpenClaw Onboarding</h1>
-        <p>
-          Use the full-screen terminal below to complete first-run setup. Once
-          onboarding starts, the wizard takes over the whole terminal surface.
-        </p>
+        <h1>OpenClaw Terminal</h1>
+        <p>Loading terminal details...</p>
       </div>
 
-      <div class="tips">
-        <div class="tip">Click inside the terminal if keyboard focus is lost</div>
-        <div class="tip">Use arrow keys, Tab, and Enter to move through prompts</div>
-        <div class="tip">The terminal will use almost the full ingress page</div>
-      </div>
+      <div class="tips"></div>
 
       <div class="terminal-shell">
         <div class="terminal-toolbar">
-          <button id="startBtn" disabled>Start Onboarding</button>
+          <button id="startBtn" disabled>Start</button>
           <div class="status" id="statusLine">Ready to start</div>
         </div>
         <div id="terminal"></div>
@@ -215,9 +206,24 @@
     </div>
 
     <script>
+      const terminalConfig = __OPENCLAW_TERMINAL_CONFIG__;
       const startBtn = document.getElementById("startBtn");
       const statusLine = document.getElementById("statusLine");
       const terminalHost = document.getElementById("terminal");
+      const tipsHost = document.querySelector(".tips");
+
+      document.title = terminalConfig.title;
+      document.querySelector("h1").textContent = terminalConfig.title;
+      document.querySelector(".hero p").textContent = terminalConfig.description;
+      startBtn.textContent = terminalConfig.startLabel;
+      tipsHost.innerHTML = "";
+      terminalConfig.tips.forEach((tip) => {
+        const tipEl = document.createElement("div");
+        tipEl.className = "tip";
+        tipEl.textContent = tip;
+        tipsHost.appendChild(tipEl);
+      });
+
       const term = new Terminal({
         theme: {
           background: "#05080f",
@@ -225,7 +231,7 @@
           cursor: "#46b3ff",
           selectionBackground: "rgba(70, 179, 255, 0.28)",
           black: "#05080f",
-          brightBlack: "#7e8ca6"
+          brightBlack: "#7e8ca6",
         },
         fontFamily: '"IBM Plex Mono", "JetBrains Mono", monospace',
         fontSize: 17,
@@ -234,7 +240,7 @@
         cursorBlink: true,
         convertEol: true,
         scrollback: 5000,
-        allowTransparency: true
+        allowTransparency: true,
       });
       const fitAddon = new FitAddon.FitAddon();
       term.loadAddon(fitAddon);
@@ -257,6 +263,8 @@
 
       let ws;
       let fitTimer = null;
+      let processRunning = false;
+      let hasAutoStarted = false;
 
       function renderStatus(text, loading = false) {
         statusLine.innerHTML = loading
@@ -284,6 +292,48 @@
         }, 30);
       }
 
+      function handleControlFrame(payload) {
+        const control = JSON.parse(payload.slice(1));
+        if (control.type !== "process_state") {
+          return;
+        }
+
+        processRunning = Boolean(control.running);
+        startBtn.disabled = processRunning;
+        if (!processRunning) {
+          if (terminalConfig.mode === "tui") {
+            startBtn.textContent = "Restart TUI";
+            renderStatus(
+              control.code === 0
+                ? "Terminal UI exited cleanly. Start it again whenever you need it."
+                : `Terminal UI exited with code ${control.code ?? "?"}.`,
+            );
+          } else if (control.code && control.code !== 0) {
+            renderStatus(`Onboarding exited with code ${control.code}.`);
+          }
+        }
+      }
+
+      function startTerminalSession() {
+        if (!ws || ws.readyState !== WebSocket.OPEN) {
+          renderStatus(
+            "The terminal connection is not ready. Reload the add-on page.",
+          );
+          return;
+        }
+        startBtn.disabled = true;
+        fitTerminal();
+        renderStatus(terminalConfig.runningStatus, true);
+        ws.send(
+          JSON.stringify({
+            type: "start",
+            cols: term.cols,
+            rows: term.rows,
+          }),
+        );
+        term.focus();
+      }
+
       function connect() {
         ws = new WebSocket(wsUrl.toString());
 
@@ -291,17 +341,24 @@
           startBtn.disabled = false;
           renderStatus("Ready to start");
           fitTerminal();
-          term.writeln("\x1b[32mConnected to setup server.\x1b[0m");
-          term.writeln(
-            "Press the button to run openclaw onboard --install-daemon",
-          );
+          term.writeln(`\x1b[32m${terminalConfig.connectLine}\x1b[0m`);
+          term.writeln(terminalConfig.readyLine);
+          if (terminalConfig.autoStart && !hasAutoStarted) {
+            hasAutoStarted = true;
+            startTerminalSession();
+          }
         };
 
         ws.onmessage = (e) => {
+          if (typeof e.data === "string" && e.data.startsWith("\u0000")) {
+            handleControlFrame(e.data);
+            return;
+          }
           term.write(e.data);
           if (
-            e.data.includes("Onboarding complete!") ||
-            e.data.includes("Initialization complete")
+            terminalConfig.mode === "onboarding" &&
+            (e.data.includes("Onboarding complete!") ||
+              e.data.includes("Initialization complete"))
           ) {
             checkReady();
           }
@@ -310,7 +367,7 @@
         ws.onerror = () => {
           startBtn.disabled = true;
           renderStatus(
-            "Could not connect to the onboarding server. Reload the add-on page.",
+            "Could not connect to the terminal server. Reload the add-on page.",
           );
           term.writeln(
             "\r\n\x1b[31mWebSocket connection failed. Reload the add-on page.\x1b[0m",
@@ -337,23 +394,7 @@
       });
 
       startBtn.onclick = () => {
-        if (!ws || ws.readyState !== WebSocket.OPEN) {
-          renderStatus(
-            "The onboarding connection is not ready. Reload the add-on page.",
-          );
-          return;
-        }
-        startBtn.disabled = true;
-        fitTerminal();
-        renderStatus("Running onboard command...", true);
-        ws.send(
-          JSON.stringify({
-            type: "start",
-            cols: term.cols,
-            rows: term.rows,
-          }),
-        );
-        term.focus();
+        startTerminalSession();
       };
 
       async function checkReady() {
@@ -374,7 +415,7 @@
                   return;
                 }
               } catch (e) {
-                // The onboarding server exits before the gateway is ready.
+                // The onboarding server exits before the next ingress target is ready.
               }
               setTimeout(pollGateway, 1500);
             };
@@ -383,7 +424,7 @@
             return;
           }
         } catch (e) {
-          // Retry until onboarding writes the config or the gateway comes up.
+          // Retry until onboarding writes the config or the next ingress target comes up.
         }
         setTimeout(checkReady, 2000);
       }

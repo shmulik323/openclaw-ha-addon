@@ -1,6 +1,6 @@
 {
   "name": "OpenClaw Gateway",
-  "version": "0.4.22",
+  "version": "0.4.24",
   "slug": "openclaw_gateway",
   "description": "OpenClaw Gateway with Home Assistant ingress onboarding",
   "url": "https://github.com/shmulik323/openclaw-ha-addon",
@@ -29,6 +29,7 @@
     "log_format": "pretty",
     "log_color": false,
     "log_fields": "",
+    "ingress_ui_mode": "auto",
     "repo_url": "https://github.com/openclaw/openclaw.git",
     "branch": "",
     "github_token": "",
@@ -42,6 +43,7 @@
     "log_format": "str",
     "log_color": "bool",
     "log_fields": "str?",
+    "ingress_ui_mode": "str?",
     "repo_url": "str",
     "branch": "str?",
     "github_token": "password?",

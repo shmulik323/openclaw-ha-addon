@@ -28,13 +28,16 @@ OpenClaw Gateway for HA OS with Home Assistant ingress onboarding and optional S
 | --------------------- | ------------------------------------------------------------- |
 | `port`                | Gateway WebSocket port (default: 18789)                       |
 | `verbose`             | Enable verbose logging                                        |
+| `ingress_ui_mode`     | `auto` (default), `control_ui`, or `tui` for the add-on panel |
 | `repo_url`            | OpenClaw source repository                                    |
 | `branch`              | Branch to checkout (optional, uses repo's default if omitted) |
 | `github_token`        | GitHub token for private repos                                |
 | `ssh_port`            | SSH server port for tunnel access (default: 2222)             |
 | `ssh_authorized_keys` | Public keys for SSH access                                    |
 
-First-run onboarding is now available directly from the add-on panel in Home Assistant.
+First-run onboarding is available directly from the add-on panel in Home Assistant.
+By default, the panel uses onboarding on first boot and then switches to the embedded Control UI.
+Set `ingress_ui_mode` to `tui` if you prefer the terminal UI after setup.
 
 ## Links
 

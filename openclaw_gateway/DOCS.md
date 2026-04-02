@@ -32,6 +32,7 @@ This add-on runs the OpenClaw Gateway on Home Assistant OS, providing Home Assis
 | `log_format`          | Log output format in the add-on Log tab: `pretty` or `raw`                   |
 | `log_color`           | Enable ANSI colors for pretty logs (may be ignored in the UI)                |
 | `log_fields`          | Comma-separated metadata keys to append (e.g. `connectionId,uptimeMs,runId`) |
+| `ingress_ui_mode`     | `auto` (default), `control_ui`, or `tui` for the add-on panel experience     |
 
 ### First Run
 
@@ -44,11 +45,18 @@ The add-on performs these steps on startup:
 5. Ensures `gateway.mode=local` if missing
 6. Starts the gateway
 
-After onboarding exits, the same ingress panel proxies the OpenClaw Control UI.
+After onboarding exits, the add-on resolves the panel behavior from `ingress_ui_mode`.
+`auto` keeps the onboarding terminal while `openclaw.json` is missing, then switches to the embedded Control UI once configuration exists.
+Set `ingress_ui_mode=tui` to keep the add-on panel on `openclaw tui` after onboarding instead.
+
+After onboarding exits in `auto` or `control_ui` mode, the same ingress panel proxies the OpenClaw Control UI.
 The add-on strips the upstream anti-framing headers on the ingress proxy only so
 Home Assistant can keep rendering the Control UI inside its iframe-based add-on panel.
 It also injects the generated gateway token into the URL fragment on first load so
 the dashboard can connect without manual token entry after onboarding.
+The ingress proxy now also preserves Home Assistant's forwarded browser host/proto
+and seeds the exact ingress WebSocket URL into the Control UI bootstrap so the
+dashboard does not have to guess its own gateway URL from the iframe path.
 To make browser access through Home Assistant ingress actually connect, the add-on
 also enables `gateway.controlUi.dangerouslyDisableDeviceAuth=true`. Token auth remains
 enabled, but OpenClaw's per-device browser pairing/device-identity checks are bypassed
@@ -140,6 +148,12 @@ Ingress relies on the Home Assistant host header and origin. The add-on now pres
 the full forwarded host and auto-seeds the generated token into the dashboard URL on
 first ingress load. If the page still shows a disconnected gateway after updating,
 refresh the add-on page once so the new token bootstrap script can run.
+
+### I want the add-on panel to use the terminal UI instead
+
+Set `ingress_ui_mode` to `tui` in the add-on options and restart the add-on.
+The first boot still uses the onboarding terminal, but once configuration exists,
+the add-on panel will open `openclaw tui` instead of the embedded Control UI.
 
 ### Gateway won't start
 

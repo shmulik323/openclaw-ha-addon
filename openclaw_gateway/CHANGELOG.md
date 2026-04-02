@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.4.24
+
+- **Fix**: Improve ingress Control UI WebSocket compatibility.
+  - Preserve Home Assistant forwarded host/proto headers through the ingress proxy instead of trusting the rewritten internal request host.
+  - Synthesize a matching `Origin` header for the gateway WebSocket handshake on the ingress path.
+  - Seed `gateway.controlUi.allowedOrigins` from Home Assistant `internal_url` and `external_url` when available.
+  - Inject the exact ingress `gatewayUrl` into the dashboard bootstrap flow instead of relying on OpenClaw's default browser URL inference.
+
+## 0.4.23
+
+- **Feature**: Add configurable ingress UI modes.
+  - New add-on option: `ingress_ui_mode=auto|control_ui|tui`.
+  - `auto` keeps the first-run onboarding terminal, then switches to the embedded Control UI once `openclaw.json` exists.
+  - `tui` keeps the add-on panel on `openclaw tui` after onboarding for users who prefer the terminal workflow.
+
 ## 0.4.22
 
 - **Fix**: Disable Control UI device-identity enforcement for Home Assistant ingress sessions.

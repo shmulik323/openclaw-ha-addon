@@ -5,7 +5,7 @@ log() {
   printf "[addon] %s\n" "$*"
 }
 
-log "run.sh version=2026-04-02-ingress-control-ui-device-auth-fix"
+log "run.sh version=2026-04-02-ingress-ui-mode-control-ui-fix"
 
 BASE_DIR=/config/openclaw
 STATE_DIR="${BASE_DIR}/.openclaw"
@@ -14,6 +14,7 @@ WORKSPACE_DIR="${BASE_DIR}/workspace"
 SSH_AUTH_DIR="${BASE_DIR}/.ssh"
 BUN_INSTALL="${BUN_INSTALL:-/usr/local/bun}"
 PNPM_HOME="${PNPM_HOME:-/pnpm}"
+TERMINAL_UI_PORT=18080
 
 mkdir -p "${BASE_DIR}" "${STATE_DIR}" "${WORKSPACE_DIR}" "${SSH_AUTH_DIR}" "${PNPM_HOME}"
 
@@ -210,16 +211,86 @@ if [ -z "${PORT}" ] || [ "${PORT}" = "null" ]; then
   PORT="18789"
 fi
 
+read_ingress_ui_mode() {
+  jq -r '.ingress_ui_mode // empty' /data/options.json 2>/dev/null || true
+}
+
+resolve_ingress_ui_selection() {
+  local raw
+  raw="$(read_ingress_ui_mode || true)"
+  case "${raw}" in
+    ""|"null"|"auto")
+      printf "auto"
+      ;;
+    "control_ui"|"controlui"|"control-ui")
+      printf "control_ui"
+      ;;
+    "tui")
+      printf "tui"
+      ;;
+    *)
+      log "ingress_ui_mode=${raw} is invalid; using auto"
+      printf "auto"
+      ;;
+  esac
+}
+
+resolve_effective_ingress_mode() {
+  local selection="$1"
+
+  if [ ! -f "${OPENCLAW_CONFIG_PATH}" ]; then
+    printf "onboarding"
+    return
+  fi
+
+  case "${selection}" in
+    "tui")
+      printf "tui"
+      ;;
+    *)
+      printf "control_ui"
+      ;;
+  esac
+}
+
+copy_terminal_ui_files() {
+  cp /onboarding.mjs "${REPO_DIR}/onboarding.mjs"
+  cp /onboarding.html "${REPO_DIR}/onboarding.html"
+}
+
+terminal_ui_pid=""
+INGRESS_UI_SELECTION="$(resolve_ingress_ui_selection)"
+INGRESS_ROOT_MODE="$(resolve_effective_ingress_mode "${INGRESS_UI_SELECTION}")"
+
+start_terminal_ui_background() {
+  local mode="$1"
+
+  if [ -n "${terminal_ui_pid}" ] && kill -0 "${terminal_ui_pid}" 2>/dev/null; then
+    return
+  fi
+
+  copy_terminal_ui_files
+  OPENCLAW_TERMINAL_MODE="${mode}" node "${REPO_DIR}/onboarding.mjs" "${TERMINAL_UI_PORT}" &
+  terminal_ui_pid=$!
+  log "started ${mode} terminal UI on port ${TERMINAL_UI_PORT}"
+}
+
 render_ingress_proxy() {
+  local upstream_port="${PORT}"
   local token_b64=''
-  if [ -f "${OPENCLAW_CONFIG_PATH}" ]; then
+
+  if [ "${INGRESS_ROOT_MODE}" = "onboarding" ] || [ "${INGRESS_ROOT_MODE}" = "tui" ]; then
+    upstream_port="${TERMINAL_UI_PORT}"
+  fi
+
+  if [ "${INGRESS_ROOT_MODE}" = "control_ui" ] && [ -f "${OPENCLAW_CONFIG_PATH}" ]; then
     token_b64="$(read_gateway_auth_token_b64 || true)"
     if [ -z "${token_b64}" ]; then
       token_b64=''
     fi
   fi
 
-  PORT="${PORT}" GATEWAY_TOKEN_B64="${token_b64}" node -e "
+  PORT="${upstream_port}" GATEWAY_TOKEN_B64="${token_b64}" node -e "
     const fs = require('fs');
     let template = fs.readFileSync('/nginx.conf.tpl', 'utf8');
     template = template.replaceAll('__UPSTREAM_PORT__', process.env.PORT);
@@ -229,20 +300,22 @@ render_ingress_proxy() {
 }
 
 start_ingress_proxy() {
-  log "starting nginx reverse proxy for Ingress on 8099 -> 127.0.0.1:${PORT}"
+  log "starting nginx reverse proxy for Ingress on 8099 -> ${INGRESS_ROOT_MODE}"
   render_ingress_proxy
   rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
   nginx
 }
 
+if [ "${INGRESS_ROOT_MODE}" = "tui" ]; then
+  start_terminal_ui_background "tui"
+fi
+
 start_ingress_proxy
 
 if [ ! -f "${OPENCLAW_CONFIG_PATH}" ]; then
-  log "openclaw.json missing; starting onboarding UI on port ${PORT}"
-  # Copy onboarding files to repo so native modules (node-pty) can be loaded
-  cp /onboarding.mjs "${REPO_DIR}/onboarding.mjs"
-  cp /onboarding.html "${REPO_DIR}/onboarding.html"
-  node "${REPO_DIR}/onboarding.mjs" "${PORT}"
+  log "openclaw.json missing; starting onboarding terminal UI on port ${TERMINAL_UI_PORT}"
+  copy_terminal_ui_files
+  OPENCLAW_TERMINAL_MODE="onboarding" node "${REPO_DIR}/onboarding.mjs" "${TERMINAL_UI_PORT}"
 else
   log "config exists; skipping openclaw setup"
 fi
@@ -392,6 +465,57 @@ ensure_control_ui_origin_fallback() {
   " 2>/dev/null
 }
 
+read_homeassistant_control_ui_origins_json() {
+  if [ -z "${HA_TOKEN:-}" ]; then
+    printf '[]'
+    return
+  fi
+
+  curl -fsS \
+    -H "Authorization: Bearer ${HA_TOKEN}" \
+    -H "Content-Type: application/json" \
+    "${HA_URL}config" 2>/dev/null \
+    | jq -c '
+        [
+          .internal_url?,
+          .external_url?
+        ]
+        | map(select(type == "string" and length > 0))
+        | map(select(test("^https?://")))
+        | map(capture("^(?<origin>https?://[^/]+)").origin)
+        | unique
+      ' 2>/dev/null \
+    || printf '[]'
+}
+
+ensure_control_ui_allowed_origins() {
+  local origins_json="$1"
+
+  ORIGINS_JSON="${origins_json}" node -e "
+    const fs=require('fs');
+    const JSON5=require('json5');
+    const p=process.env.OPENCLAW_CONFIG_PATH;
+    const raw=fs.readFileSync(p,'utf8');
+    const data=JSON5.parse(raw);
+    const gateway=data.gateway||{};
+    const controlUi=gateway.controlUi||{};
+    const existing=Array.isArray(controlUi.allowedOrigins) ? controlUi.allowedOrigins : [];
+    const requested=JSON.parse(process.env.ORIGINS_JSON || '[]');
+    const normalized=(values)=>Array.from(new Set(values.filter((value)=>typeof value==='string').map((value)=>value.trim()).filter(Boolean)));
+    const merged=normalized([...existing, ...requested]);
+    const changed=JSON.stringify(existing)!==JSON.stringify(merged);
+    if(changed){
+      controlUi.allowedOrigins=merged;
+      gateway.controlUi=controlUi;
+      data.gateway=gateway;
+      fs.writeFileSync(p, JSON.stringify(data,null,2)+'\\n');
+      console.log(JSON.stringify({status:'updated', origins:merged}));
+    }else{
+      console.log(JSON.stringify({status:'unchanged', origins:existing}));
+    }
+  " 2>/dev/null
+}
+
 if [ -f "${OPENCLAW_CONFIG_PATH}" ]; then
   mode_status="$(ensure_gateway_mode || true)"
   if [ "${mode_status}" = "updated" ]; then
@@ -471,6 +595,29 @@ if [ -f "${OPENCLAW_CONFIG_PATH}" ]; then
   fi
 fi
 
+if [ -f "${OPENCLAW_CONFIG_PATH}" ]; then
+  ha_control_ui_origins="$(read_homeassistant_control_ui_origins_json || true)"
+  if [ -n "${ha_control_ui_origins}" ] && [ "${ha_control_ui_origins}" != "[]" ]; then
+    allowed_origin_result="$(ensure_control_ui_allowed_origins "${ha_control_ui_origins}" || true)"
+    allowed_origin_status="$(printf '%s' "${allowed_origin_result}" | jq -r '.status // empty' 2>/dev/null || true)"
+    allowed_origin_values="$(printf '%s' "${allowed_origin_result}" | jq -c '.origins // []' 2>/dev/null || printf '[]')"
+    if [ "${allowed_origin_status}" = "updated" ]; then
+      log "gateway.controlUi.allowedOrigins merged from Home Assistant config: ${allowed_origin_values}"
+    elif [ "${allowed_origin_status}" = "unchanged" ]; then
+      log "gateway.controlUi.allowedOrigins already covers Home Assistant origins: ${allowed_origin_values}"
+    fi
+  else
+    log "Home Assistant internal/external URL origins not available; relying on ingress header rewrite"
+  fi
+fi
+
+INGRESS_ROOT_MODE="$(resolve_effective_ingress_mode "${INGRESS_UI_SELECTION}")"
+log "effective ingress ui mode=${INGRESS_ROOT_MODE} (selection=${INGRESS_UI_SELECTION})"
+
+if [ "${INGRESS_ROOT_MODE}" = "tui" ]; then
+  start_terminal_ui_background "tui"
+fi
+
 render_ingress_proxy
 nginx -s reload >/dev/null 2>&1 || true
 
@@ -525,6 +672,9 @@ forward_usr1() {
 }
 
 shutdown_child() {
+  if [ -n "${terminal_ui_pid}" ]; then
+    kill -TERM "${terminal_ui_pid}" 2>/dev/null || true
+  fi
   if [ -n "${tail_pid}" ]; then
     kill -TERM "${tail_pid}" 2>/dev/null || true
   fi

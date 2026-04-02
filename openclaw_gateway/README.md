@@ -6,7 +6,7 @@ Run [OpenClaw](https://github.com/openclaw/openclaw) on Home Assistant OS with H
 
 - 🦞 **OpenClaw Gateway** — AI agent with messaging, automation, and more
 - 🧭 **Ingress Onboarding** — Complete first-run setup from the add-on panel
-- 🖥️ **Ingress Control UI** — Continue into the OpenClaw web UI from the same add-on panel
+- 🖥️ **Configurable Ingress UI** — Use the embedded Control UI by default after setup, or switch the panel to the terminal UI
 - 🔑 **Auto Token Bootstrap** — Ingress injects the generated gateway token on first dashboard load
 - 🔓 **Ingress Device-Auth Bypass** — Token auth stays on, but per-device browser pairing is disabled for the ingress UI
 - 🔒 **SSH Tunnel** — Optional secure remote access for OpenClaw.app or CLI
@@ -19,6 +19,13 @@ Run [OpenClaw](https://github.com/openclaw/openclaw) on Home Assistant OS with H
 2. Install "OpenClaw Gateway" from the Add-on Store
 3. Start the add-on and open the add-on panel to run onboarding
 4. Optionally configure your SSH public key for tunnel access
+
+`ingress_ui_mode` defaults to `auto`, which means:
+
+- no `openclaw.json` yet: the add-on panel stays on the onboarding terminal
+- config exists: the add-on panel switches to the embedded Control UI
+
+Set `ingress_ui_mode` to `tui` if you want the add-on panel to open the terminal UI instead after setup.
 
 ## Links
 
