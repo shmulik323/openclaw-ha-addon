@@ -5,7 +5,7 @@ log() {
   printf "[addon] %s\n" "$*"
 }
 
-log "run.sh version=2026-04-02-ingress-ui-mode-control-ui-fix"
+log "run.sh version=2026-04-02-supervisor-browser-modes"
 
 BASE_DIR=/config/openclaw
 STATE_DIR="${BASE_DIR}/.openclaw"
@@ -15,13 +15,21 @@ SSH_AUTH_DIR="${BASE_DIR}/.ssh"
 BUN_INSTALL="${BUN_INSTALL:-/usr/local/bun}"
 PNPM_HOME="${PNPM_HOME:-/pnpm}"
 TERMINAL_UI_PORT=18080
+RUNTIME_HELPER=/runtime-helper.mjs
+STATUS_FILE="${STATE_DIR}/addon-runtime-status.json"
+RELOAD_REASON_FILE="${STATE_DIR}/addon-reload-reason"
+LOCAL_BROWSER_EXECUTABLE=/usr/bin/chromium
+SUPERVISOR_PID="$$"
 
 mkdir -p "${BASE_DIR}" "${STATE_DIR}" "${WORKSPACE_DIR}" "${SSH_AUTH_DIR}" "${PNPM_HOME}"
 
-# Create persistent directories
-mkdir -p "${BASE_DIR}/.config/gh" "${BASE_DIR}/.local" "${BASE_DIR}/.cache" "${BASE_DIR}/.npm" "${BASE_DIR}/bin"
+mkdir -p \
+  "${BASE_DIR}/.config/gh" \
+  "${BASE_DIR}/.local" \
+  "${BASE_DIR}/.cache" \
+  "${BASE_DIR}/.npm" \
+  "${BASE_DIR}/bin"
 
-# Symlink /root dirs to persistent storage (needed because some tools ignore $HOME for root)
 for dir in .ssh .config .local .cache .npm; do
   target="${BASE_DIR}/${dir}"
   link="/root/${dir}"
@@ -56,13 +64,8 @@ export PNPM_HOME="${PNPM_HOME}"
 export PATH="${BASE_DIR}/bin:${BUN_INSTALL}/bin:${PNPM_HOME}:${PATH}"
 export OPENCLAW_STATE_DIR="${STATE_DIR}"
 export OPENCLAW_CONFIG_PATH="${STATE_DIR}/openclaw.json"
-
-# Home Assistant API integration
-# HA add-ons have access to the Supervisor API at http://supervisor/
-# and Home Assistant Core API at http://supervisor/core/api/
 export HA_URL="http://supervisor/core/api/"
 
-# Use user-provided token if set, otherwise try SUPERVISOR_TOKEN
 HA_TOKEN_OPT="$(jq -r '.ha_token // empty' /data/options.json 2>/dev/null || true)"
 if [ -n "${HA_TOKEN_OPT}" ] && [ "${HA_TOKEN_OPT}" != "null" ]; then
   export HA_TOKEN="${HA_TOKEN_OPT}"
@@ -184,7 +187,7 @@ else
     git -C "${REPO_DIR}" checkout "${BRANCH}"
     git -C "${REPO_DIR}" reset --hard "origin/${BRANCH}"
   else
-    DEFAULT_BRANCH=$(git -C "${REPO_DIR}" remote show origin | sed -n '/HEAD branch/s/.*: //p')
+    DEFAULT_BRANCH="$(git -C "${REPO_DIR}" remote show origin | sed -n '/HEAD branch/s/.*: //p')"
     git -C "${REPO_DIR}" checkout "${DEFAULT_BRANCH}"
     git -C "${REPO_DIR}" reset --hard "origin/${DEFAULT_BRANCH}"
   fi
@@ -206,61 +209,53 @@ fi
 log "building control UI"
 pnpm ui:build
 
-PORT="$(jq -r .port /data/options.json 2>/dev/null || echo 18789)"
-if [ -z "${PORT}" ] || [ "${PORT}" = "null" ]; then
-  PORT="18789"
-fi
-
-read_ingress_ui_mode() {
-  jq -r '.ingress_ui_mode // empty' /data/options.json 2>/dev/null || true
-}
-
-resolve_ingress_ui_selection() {
-  local raw
-  raw="$(read_ingress_ui_mode || true)"
-  case "${raw}" in
-    ""|"null"|"auto")
-      printf "auto"
-      ;;
-    "control_ui"|"controlui"|"control-ui")
-      printf "control_ui"
-      ;;
-    "tui")
-      printf "tui"
-      ;;
-    *)
-      log "ingress_ui_mode=${raw} is invalid; using auto"
-      printf "auto"
-      ;;
-  esac
-}
-
-resolve_effective_ingress_mode() {
-  local selection="$1"
-
-  if [ ! -f "${OPENCLAW_CONFIG_PATH}" ]; then
-    printf "onboarding"
-    return
-  fi
-
-  case "${selection}" in
-    "tui")
-      printf "tui"
-      ;;
-    *)
-      printf "control_ui"
-      ;;
-  esac
-}
-
 copy_terminal_ui_files() {
   cp /onboarding.mjs "${REPO_DIR}/onboarding.mjs"
   cp /onboarding.html "${REPO_DIR}/onboarding.html"
 }
 
 terminal_ui_pid=""
-INGRESS_UI_SELECTION="$(resolve_ingress_ui_selection)"
-INGRESS_ROOT_MODE="$(resolve_effective_ingress_mode "${INGRESS_UI_SELECTION}")"
+tail_pid=""
+child_pid=""
+watcher_pid=""
+NGINX_STARTED="false"
+INGRESS_UI_SELECTION="auto"
+INGRESS_ROOT_MODE="onboarding"
+CURRENT_RUNTIME_DIGEST=""
+RUNTIME_STATE_JSON='{}'
+LOG_FILE="/tmp/openclaw/openclaw.log"
+PORT="18789"
+VERBOSE="false"
+LOG_FORMAT="pretty"
+LOG_COLOR="false"
+LOG_FIELDS=""
+BROWSER_MODE="node_host"
+LOCAL_BROWSER_DETECTED="false"
+LOCAL_BROWSER_LAUNCH_VALIDATED="false"
+BROWSER_RUNTIME_ACTIVE="false"
+BROWSER_STATUS_REASON="runtime state not initialized yet"
+LAST_RELOAD_RESULT="pending"
+LAST_RELOAD_REASON="startup"
+LAST_RELOAD_ERROR=""
+RELOAD_PENDING="false"
+RELOAD_FALLBACK_USED="false"
+
+resolve_effective_ingress_mode() {
+  local selection="$1"
+  local config_exists="$2"
+
+  if [ "${config_exists}" != "true" ]; then
+    printf "onboarding"
+    return
+  fi
+
+  if [ "${selection}" = "tui" ]; then
+    printf "tui"
+    return
+  fi
+
+  printf "control_ui"
+}
 
 start_terminal_ui_background() {
   local mode="$1"
@@ -275,19 +270,25 @@ start_terminal_ui_background() {
   log "started ${mode} terminal UI on port ${TERMINAL_UI_PORT}"
 }
 
+stop_terminal_ui_background() {
+  if [ -n "${terminal_ui_pid}" ]; then
+    kill -TERM "${terminal_ui_pid}" 2>/dev/null || true
+    terminal_ui_pid=""
+  fi
+}
+
 render_ingress_proxy() {
   local upstream_port="${PORT}"
-  local token_b64=''
+  local token_b64=""
+  local config_exists
 
+  config_exists="$(printf '%s' "${RUNTIME_STATE_JSON}" | jq -r '.configExists // false' 2>/dev/null || printf 'false')"
   if [ "${INGRESS_ROOT_MODE}" = "onboarding" ] || [ "${INGRESS_ROOT_MODE}" = "tui" ]; then
     upstream_port="${TERMINAL_UI_PORT}"
   fi
 
-  if [ "${INGRESS_ROOT_MODE}" = "control_ui" ] && [ -f "${OPENCLAW_CONFIG_PATH}" ]; then
-    token_b64="$(read_gateway_auth_token_b64 || true)"
-    if [ -z "${token_b64}" ]; then
-      token_b64=''
-    fi
+  if [ "${INGRESS_ROOT_MODE}" = "control_ui" ] && [ "${config_exists}" = "true" ]; then
+    token_b64="$(printf '%s' "${RUNTIME_STATE_JSON}" | jq -r '.gatewayAuthTokenBase64 // ""' 2>/dev/null || true)"
   fi
 
   PORT="${upstream_port}" GATEWAY_TOKEN_B64="${token_b64}" node -e "
@@ -304,165 +305,7 @@ start_ingress_proxy() {
   render_ingress_proxy
   rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
   nginx
-}
-
-if [ "${INGRESS_ROOT_MODE}" = "tui" ]; then
-  start_terminal_ui_background "tui"
-fi
-
-start_ingress_proxy
-
-if [ ! -f "${OPENCLAW_CONFIG_PATH}" ]; then
-  log "openclaw.json missing; starting onboarding terminal UI on port ${TERMINAL_UI_PORT}"
-  copy_terminal_ui_files
-  OPENCLAW_TERMINAL_MODE="onboarding" node "${REPO_DIR}/onboarding.mjs" "${TERMINAL_UI_PORT}"
-else
-  log "config exists; skipping openclaw setup"
-fi
-
-ensure_gateway_mode() {
-  node -e "const fs=require('fs');const JSON5=require('json5');const p=process.env.OPENCLAW_CONFIG_PATH;const raw=fs.readFileSync(p,'utf8');const data=JSON5.parse(raw);const gateway=data.gateway||{};const mode=String(gateway.mode||'').trim();if(!mode){gateway.mode='local';data.gateway=gateway;fs.writeFileSync(p, JSON.stringify(data,null,2)+'\\n');console.log('updated');}else{console.log('unchanged');}" 2>/dev/null
-}
-
-read_gateway_mode() {
-  node -e "const fs=require('fs');const JSON5=require('json5');const p=process.env.OPENCLAW_CONFIG_PATH;const raw=fs.readFileSync(p,'utf8');const data=JSON5.parse(raw);const gateway=data.gateway||{};const mode=String(gateway.mode||'').trim();if(mode){console.log(mode);}"; 2>/dev/null
-}
-
-ensure_log_file() {
-  node -e "const fs=require('fs');const JSON5=require('json5');const p=process.env.OPENCLAW_CONFIG_PATH;const raw=fs.readFileSync(p,'utf8');const data=JSON5.parse(raw);const logging=data.logging||{};const file=String(logging.file||'').trim();if(!file){logging.file='/tmp/openclaw/openclaw.log';data.logging=logging;fs.writeFileSync(p, JSON.stringify(data,null,2)+'\\n');console.log('updated');}else{console.log('unchanged');}" 2>/dev/null
-}
-
-read_log_file() {
-  node -e "const fs=require('fs');const JSON5=require('json5');const p=process.env.OPENCLAW_CONFIG_PATH;const raw=fs.readFileSync(p,'utf8');const data=JSON5.parse(raw);const logging=data.logging||{};const file=String(logging.file||'').trim();if(file){console.log(file);}"; 2>/dev/null
-}
-
-ensure_gateway_auth() {
-  node -e "
-    const crypto=require('crypto');
-    const fs=require('fs');
-    const JSON5=require('json5');
-    const p=process.env.OPENCLAW_CONFIG_PATH;
-    const raw=fs.readFileSync(p,'utf8');
-    const data=JSON5.parse(raw);
-    const gateway=data.gateway||{};
-    const auth=gateway.auth||{};
-    let updated=false;
-    const mode=String(auth.mode||'').trim();
-    if(!mode){
-      auth.mode='token';
-      updated=true;
-    }
-    const token=String(auth.token||'').trim();
-    if(!token){
-      auth.token=crypto.randomBytes(24).toString('hex');
-      updated=true;
-    }
-    if(updated){
-      gateway.auth=auth;
-      data.gateway=gateway;
-      fs.writeFileSync(p, JSON.stringify(data,null,2)+'\\n');
-      console.log('updated');
-    }else{
-      console.log('unchanged');
-    }
-  " 2>/dev/null
-}
-
-ensure_insecure_auth() {
-  node -e "
-    const fs=require('fs');
-    const JSON5=require('json5');
-    const p=process.env.OPENCLAW_CONFIG_PATH;
-    const raw=fs.readFileSync(p,'utf8');
-    const data=JSON5.parse(raw);
-    const gateway=data.gateway||{};
-    const controlUi=gateway.controlUi||{};
-    if(controlUi.allowInsecureAuth!==true){
-      controlUi.allowInsecureAuth=true;
-      gateway.controlUi=controlUi;
-      data.gateway=gateway;
-      fs.writeFileSync(p, JSON.stringify(data,null,2)+'\\n');
-      console.log('updated');
-    }else{
-      console.log('unchanged');
-    }
-  " 2>/dev/null
-}
-
-ensure_disable_device_auth() {
-  node -e "
-    const fs=require('fs');
-    const JSON5=require('json5');
-    const p=process.env.OPENCLAW_CONFIG_PATH;
-    const raw=fs.readFileSync(p,'utf8');
-    const data=JSON5.parse(raw);
-    const gateway=data.gateway||{};
-    const controlUi=gateway.controlUi||{};
-    if(controlUi.dangerouslyDisableDeviceAuth!==true){
-      controlUi.dangerouslyDisableDeviceAuth=true;
-      gateway.controlUi=controlUi;
-      data.gateway=gateway;
-      fs.writeFileSync(p, JSON.stringify(data,null,2)+'\\n');
-      console.log('updated');
-    }else{
-      console.log('unchanged');
-    }
-  " 2>/dev/null
-}
-
-ensure_trusted_proxies() {
-  node -e "
-    const fs=require('fs');
-    const JSON5=require('json5');
-    const p=process.env.OPENCLAW_CONFIG_PATH;
-    const raw=fs.readFileSync(p,'utf8');
-    const data=JSON5.parse(raw);
-    const gateway=data.gateway||{};
-    const proxies=gateway.trustedProxies||[];
-    if(!Array.isArray(proxies) || !proxies.includes('127.0.0.1')){
-      gateway.trustedProxies=['127.0.0.1','172.30.32.0/24'];
-      data.gateway=gateway;
-      fs.writeFileSync(p, JSON.stringify(data,null,2)+'\\n');
-      console.log('updated');
-    }else{
-      console.log('unchanged');
-    }
-  " 2>/dev/null
-}
-
-read_gateway_auth_token_b64() {
-  node -e "
-    const fs=require('fs');
-    const JSON5=require('json5');
-    const p=process.env.OPENCLAW_CONFIG_PATH;
-    const raw=fs.readFileSync(p,'utf8');
-    const data=JSON5.parse(raw);
-    const gateway=data.gateway||{};
-    const auth=gateway.auth||{};
-    const token=String(auth.token||'').trim();
-    process.stdout.write(Buffer.from(token, 'utf8').toString('base64'));
-  " 2>/dev/null
-}
-
-ensure_control_ui_origin_fallback() {
-  node -e "
-    const fs=require('fs');
-    const JSON5=require('json5');
-    const p=process.env.OPENCLAW_CONFIG_PATH;
-    const raw=fs.readFileSync(p,'utf8');
-    const data=JSON5.parse(raw);
-    const gateway=data.gateway||{};
-    const controlUi=gateway.controlUi||{};
-    if(controlUi.dangerouslyAllowHostHeaderOriginFallback!==true){
-      controlUi.dangerouslyAllowHostHeaderOriginFallback=true;
-      gateway.controlUi=controlUi;
-      data.gateway=gateway;
-      fs.writeFileSync(p, JSON.stringify(data,null,2)+'\\n');
-      console.log('updated');
-    }else{
-      console.log('unchanged');
-    }
-  " 2>/dev/null
+  NGINX_STARTED="true"
 }
 
 read_homeassistant_control_ui_origins_json() {
@@ -488,198 +331,132 @@ read_homeassistant_control_ui_origins_json() {
     || printf '[]'
 }
 
-ensure_control_ui_allowed_origins() {
+run_reconcile() {
   local origins_json="$1"
 
-  ORIGINS_JSON="${origins_json}" node -e "
-    const fs=require('fs');
-    const JSON5=require('json5');
-    const p=process.env.OPENCLAW_CONFIG_PATH;
-    const raw=fs.readFileSync(p,'utf8');
-    const data=JSON5.parse(raw);
-    const gateway=data.gateway||{};
-    const controlUi=gateway.controlUi||{};
-    const existing=Array.isArray(controlUi.allowedOrigins) ? controlUi.allowedOrigins : [];
-    const requested=JSON.parse(process.env.ORIGINS_JSON || '[]');
-    const normalized=(values)=>Array.from(new Set(values.filter((value)=>typeof value==='string').map((value)=>value.trim()).filter(Boolean)));
-    const merged=normalized([...existing, ...requested]);
-    const changed=JSON.stringify(existing)!==JSON.stringify(merged);
-    if(changed){
-      controlUi.allowedOrigins=merged;
-      gateway.controlUi=controlUi;
-      data.gateway=gateway;
-      fs.writeFileSync(p, JSON.stringify(data,null,2)+'\\n');
-      console.log(JSON.stringify({status:'updated', origins:merged}));
-    }else{
-      console.log(JSON.stringify({status:'unchanged', origins:existing}));
-    }
-  " 2>/dev/null
+  node "${RUNTIME_HELPER}" reconcile \
+    --config "${OPENCLAW_CONFIG_PATH}" \
+    --options /data/options.json \
+    --ha-origins "${origins_json}"
 }
 
-if [ -f "${OPENCLAW_CONFIG_PATH}" ]; then
-  mode_status="$(ensure_gateway_mode || true)"
-  if [ "${mode_status}" = "updated" ]; then
-    log "gateway.mode set to local (missing)"
-  elif [ "${mode_status}" = "unchanged" ]; then
-    log "gateway.mode already set"
+log_reconcile_result() {
+  local result_json="$1"
+  local config_changed
+  config_changed="$(printf '%s' "${result_json}" | jq -r '.configChanged // false' 2>/dev/null || printf 'false')"
+  if [ "${config_changed}" = "true" ]; then
+    while IFS= read -r change; do
+      [ -n "${change}" ] || continue
+      log "config reconcile: ${change}"
+    done < <(printf '%s' "${result_json}" | jq -r '.changes[]?' 2>/dev/null || true)
+  fi
+}
+
+apply_runtime_reconciliation() {
+  local origins_json
+  local next_state
+
+  origins_json="$(read_homeassistant_control_ui_origins_json || true)"
+  if [ -z "${origins_json}" ]; then
+    origins_json='[]'
+  fi
+
+  next_state="$(run_reconcile "${origins_json}")"
+  log_reconcile_result "${next_state}"
+
+  RUNTIME_STATE_JSON="${next_state}"
+  CURRENT_RUNTIME_DIGEST="$(printf '%s' "${RUNTIME_STATE_JSON}" | jq -r '.runtimeDigest // ""' 2>/dev/null || true)"
+  LOG_FILE="$(printf '%s' "${RUNTIME_STATE_JSON}" | jq -r '.logFile // "/tmp/openclaw/openclaw.log"' 2>/dev/null || printf '/tmp/openclaw/openclaw.log')"
+  PORT="$(printf '%s' "${RUNTIME_STATE_JSON}" | jq -r '.runtimeOptions.port // 18789' 2>/dev/null || printf '18789')"
+  VERBOSE="$(printf '%s' "${RUNTIME_STATE_JSON}" | jq -r '.runtimeOptions.verbose // false' 2>/dev/null || printf 'false')"
+  LOG_FORMAT="$(printf '%s' "${RUNTIME_STATE_JSON}" | jq -r '.runtimeOptions.logFormat // "pretty"' 2>/dev/null || printf 'pretty')"
+  LOG_COLOR="$(printf '%s' "${RUNTIME_STATE_JSON}" | jq -r '.runtimeOptions.logColor // false' 2>/dev/null || printf 'false')"
+  LOG_FIELDS="$(printf '%s' "${RUNTIME_STATE_JSON}" | jq -r '.runtimeOptions.logFields // ""' 2>/dev/null || true)"
+  INGRESS_UI_SELECTION="$(printf '%s' "${RUNTIME_STATE_JSON}" | jq -r '.runtimeOptions.ingressUiMode // "auto"' 2>/dev/null || printf 'auto')"
+  BROWSER_MODE="$(printf '%s' "${RUNTIME_STATE_JSON}" | jq -r '.browserMode // "node_host"' 2>/dev/null || printf 'node_host')"
+  LOCAL_BROWSER_DETECTED="$(printf '%s' "${RUNTIME_STATE_JSON}" | jq -r '.localBrowserDetected // false' 2>/dev/null || printf 'false')"
+  LOCAL_BROWSER_EXECUTABLE_PATH="$(printf '%s' "${RUNTIME_STATE_JSON}" | jq -r '.localBrowserExecutable // ""' 2>/dev/null || true)"
+  BROWSER_STATUS_REASON="$(printf '%s' "${RUNTIME_STATE_JSON}" | jq -r '.browserStatusReason // ""' 2>/dev/null || true)"
+  if [ -z "${LOCAL_BROWSER_EXECUTABLE_PATH}" ]; then
+    LOCAL_BROWSER_EXECUTABLE_PATH="${LOCAL_BROWSER_EXECUTABLE}"
+  fi
+}
+
+refresh_ingress_surfaces() {
+  local config_exists
+  local desired_mode
+
+  config_exists="$(printf '%s' "${RUNTIME_STATE_JSON}" | jq -r '.configExists // false' 2>/dev/null || printf 'false')"
+  desired_mode="$(resolve_effective_ingress_mode "${INGRESS_UI_SELECTION}" "${config_exists}")"
+
+  if [ "${desired_mode}" = "tui" ]; then
+    start_terminal_ui_background "tui"
   else
-    log "failed to normalize gateway.mode (invalid config?)"
+    stop_terminal_ui_background
   fi
-fi
 
-LOG_FILE="/tmp/openclaw/openclaw.log"
-if [ -f "${OPENCLAW_CONFIG_PATH}" ]; then
-  log_status="$(ensure_log_file || true)"
-  if [ "${log_status}" = "updated" ]; then
-    log "logging.file set to ${LOG_FILE} (missing)"
-  elif [ "${log_status}" = "unchanged" ]; then
-    read_log="$(read_log_file || true)"
-    if [ -n "${read_log}" ]; then
-      LOG_FILE="${read_log}"
-    fi
+  if [ "${desired_mode}" != "${INGRESS_ROOT_MODE}" ]; then
+    INGRESS_ROOT_MODE="${desired_mode}"
+    log "effective ingress ui mode=${INGRESS_ROOT_MODE} (selection=${INGRESS_UI_SELECTION})"
   else
-    log "failed to normalize logging.file (invalid config?)"
+    INGRESS_ROOT_MODE="${desired_mode}"
   fi
-fi
 
-if [ -f "${OPENCLAW_CONFIG_PATH}" ]; then
-  auth_status="$(ensure_gateway_auth || true)"
-  if [ "${auth_status}" = "updated" ]; then
-    log "gateway.auth.token set (missing)"
-  elif [ "${auth_status}" = "unchanged" ]; then
-    log "gateway.auth.token already set"
-  else
-    log "failed to normalize gateway.auth (invalid config?)"
+  render_ingress_proxy
+  if [ "${NGINX_STARTED}" = "true" ]; then
+    nginx -s reload >/dev/null 2>&1 || true
   fi
-fi
+}
 
-# Enable insecure auth for HA Ingress HTTP access
-if [ -f "${OPENCLAW_CONFIG_PATH}" ]; then
-  auth_status="$(ensure_insecure_auth || true)"
-  if [ "${auth_status}" = "updated" ]; then
-    log "gateway.controlUi.allowInsecureAuth set to true (for Ingress)"
-  elif [ "${auth_status}" = "unchanged" ]; then
-    log "gateway.controlUi.allowInsecureAuth already set"
+write_runtime_status() {
+  local child_json='null'
+  if [ -n "${child_pid}" ]; then
+    child_json="${child_pid}"
   fi
-fi
 
-# Disable device-identity enforcement for the HA ingress Control UI.
-# OpenClaw only treats allowInsecureAuth as a localhost-only bypass, so normal
-# browser sessions through Home Assistant still need the explicit break-glass
-# flag to connect with token auth.
-if [ -f "${OPENCLAW_CONFIG_PATH}" ]; then
-  device_auth_status="$(ensure_disable_device_auth || true)"
-  if [ "${device_auth_status}" = "updated" ]; then
-    log "gateway.controlUi.dangerouslyDisableDeviceAuth set to true (for Ingress)"
-  elif [ "${device_auth_status}" = "unchanged" ]; then
-    log "gateway.controlUi.dangerouslyDisableDeviceAuth already set"
-  fi
-fi
+  printf '%s' "${RUNTIME_STATE_JSON}" \
+    | jq \
+      --arg updatedAt "$(date -Iseconds)" \
+      --argjson supervisorPid "${SUPERVISOR_PID}" \
+      --argjson childPid "${child_json}" \
+      --argjson reloadPending "${RELOAD_PENDING}" \
+      --argjson localBrowserLaunchValidated "${LOCAL_BROWSER_LAUNCH_VALIDATED}" \
+      --argjson browserRuntimeActive "${BROWSER_RUNTIME_ACTIVE}" \
+      --arg browserStatusReason "${BROWSER_STATUS_REASON}" \
+      --arg lastReloadResult "${LAST_RELOAD_RESULT}" \
+      --arg lastReloadReason "${LAST_RELOAD_REASON}" \
+      --arg lastReloadError "${LAST_RELOAD_ERROR}" \
+      '
+      . + {
+        updatedAt: $updatedAt,
+        supervisorPid: $supervisorPid,
+        childPid: $childPid,
+        reloadPending: $reloadPending,
+        localBrowserLaunchValidated: $localBrowserLaunchValidated,
+        browserRuntimeActive: $browserRuntimeActive,
+        browserStatusReason: $browserStatusReason,
+        lastReloadResult: $lastReloadResult,
+        lastReloadReason: $lastReloadReason,
+        lastReloadError: $lastReloadError
+      }
+      ' > "${STATUS_FILE}.tmp"
 
-# Configure trusted proxies for nginx reverse proxy
-if [ -f "${OPENCLAW_CONFIG_PATH}" ]; then
-  proxy_status="$(ensure_trusted_proxies || true)"
-  if [ "${proxy_status}" = "updated" ]; then
-    log "gateway.trustedProxies set to [127.0.0.1, 172.30.32.0/24]"
-  elif [ "${proxy_status}" = "unchanged" ]; then
-    log "gateway.trustedProxies already set"
-  fi
-fi
+  mv "${STATUS_FILE}.tmp" "${STATUS_FILE}"
+}
 
-if [ -f "${OPENCLAW_CONFIG_PATH}" ]; then
-  origin_status="$(ensure_control_ui_origin_fallback || true)"
-  if [ "${origin_status}" = "updated" ]; then
-    log "gateway.controlUi.dangerouslyAllowHostHeaderOriginFallback set to true (for Ingress)"
-  elif [ "${origin_status}" = "unchanged" ]; then
-    log "gateway.controlUi.dangerouslyAllowHostHeaderOriginFallback already set"
-  fi
-fi
+compute_gateway_args() {
+  local gateway_mode
+  ALLOW_UNCONFIGURED=()
+  gateway_mode="$(printf '%s' "${RUNTIME_STATE_JSON}" | jq -r '.gatewayMode // ""' 2>/dev/null || true)"
 
-if [ -f "${OPENCLAW_CONFIG_PATH}" ]; then
-  ha_control_ui_origins="$(read_homeassistant_control_ui_origins_json || true)"
-  if [ -n "${ha_control_ui_origins}" ] && [ "${ha_control_ui_origins}" != "[]" ]; then
-    allowed_origin_result="$(ensure_control_ui_allowed_origins "${ha_control_ui_origins}" || true)"
-    allowed_origin_status="$(printf '%s' "${allowed_origin_result}" | jq -r '.status // empty' 2>/dev/null || true)"
-    allowed_origin_values="$(printf '%s' "${allowed_origin_result}" | jq -c '.origins // []' 2>/dev/null || printf '[]')"
-    if [ "${allowed_origin_status}" = "updated" ]; then
-      log "gateway.controlUi.allowedOrigins merged from Home Assistant config: ${allowed_origin_values}"
-    elif [ "${allowed_origin_status}" = "unchanged" ]; then
-      log "gateway.controlUi.allowedOrigins already covers Home Assistant origins: ${allowed_origin_values}"
-    fi
-  else
-    log "Home Assistant internal/external URL origins not available; relying on ingress header rewrite"
-  fi
-fi
-
-INGRESS_ROOT_MODE="$(resolve_effective_ingress_mode "${INGRESS_UI_SELECTION}")"
-log "effective ingress ui mode=${INGRESS_ROOT_MODE} (selection=${INGRESS_UI_SELECTION})"
-
-if [ "${INGRESS_ROOT_MODE}" = "tui" ]; then
-  start_terminal_ui_background "tui"
-fi
-
-render_ingress_proxy
-nginx -s reload >/dev/null 2>&1 || true
-
-VERBOSE="$(jq -r .verbose /data/options.json)"
-LOG_FORMAT="$(jq -r '.log_format // empty' /data/options.json 2>/dev/null || true)"
-LOG_COLOR="$(jq -r '.log_color // empty' /data/options.json 2>/dev/null || true)"
-LOG_FIELDS="$(jq -r '.log_fields // empty' /data/options.json 2>/dev/null || true)"
-
-if [ -z "${LOG_FORMAT}" ] || [ "${LOG_FORMAT}" = "null" ]; then
-  LOG_FORMAT="pretty"
-fi
-if [ -z "${LOG_COLOR}" ] || [ "${LOG_COLOR}" = "null" ]; then
-  LOG_COLOR="false"
-fi
-if [ -z "${LOG_FIELDS}" ] || [ "${LOG_FIELDS}" = "null" ]; then
-  LOG_FIELDS=""
-fi
-if [ "${LOG_FORMAT}" != "pretty" ] && [ "${LOG_FORMAT}" != "raw" ]; then
-  log "log_format=${LOG_FORMAT} is invalid; using pretty"
-  LOG_FORMAT="pretty"
-fi
-
-ALLOW_UNCONFIGURED=()
-if [ ! -f "${OPENCLAW_CONFIG_PATH}" ]; then
-  log "config missing; allowing unconfigured gateway start"
-  ALLOW_UNCONFIGURED=(--allow-unconfigured)
-else
-  gateway_mode="$(read_gateway_mode || true)"
   if [ -z "${gateway_mode}" ]; then
     log "gateway.mode missing; allowing unconfigured gateway start"
     ALLOW_UNCONFIGURED=(--allow-unconfigured)
   fi
-fi
 
-ARGS=(gateway "${ALLOW_UNCONFIGURED[@]}" --port "${PORT}")
-if [ "${VERBOSE}" = "true" ]; then
-  ARGS+=(--verbose)
-fi
-
-export OPENCLAW_NO_RESPAWN=1
-
-child_pid=""
-tail_pid=""
-
-forward_usr1() {
-  if [ -n "${child_pid}" ]; then
-    if ! pkill -USR1 -P "${child_pid}" 2>/dev/null; then
-      kill -USR1 "${child_pid}" 2>/dev/null || true
-    fi
-    log "forwarded SIGUSR1 to gateway process"
-  fi
-}
-
-shutdown_child() {
-  if [ -n "${terminal_ui_pid}" ]; then
-    kill -TERM "${terminal_ui_pid}" 2>/dev/null || true
-  fi
-  if [ -n "${tail_pid}" ]; then
-    kill -TERM "${tail_pid}" 2>/dev/null || true
-  fi
-  if [ -n "${child_pid}" ]; then
-    kill -TERM "${child_pid}" 2>/dev/null || true
+  ARGS=(gateway "${ALLOW_UNCONFIGURED[@]}" --port "${PORT}")
+  if [ "${VERBOSE}" = "true" ]; then
+    ARGS+=(--verbose)
   fi
 }
 
@@ -764,32 +541,225 @@ start_log_tail() {
   tail_pid=$!
 }
 
-trap forward_usr1 USR1
+wait_for_gateway_ready() {
+  local attempt
+  for attempt in $(seq 1 60); do
+    if curl -fsS "http://127.0.0.1:${PORT}/healthz" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
+
+validate_local_browser_runtime() {
+  LOCAL_BROWSER_LAUNCH_VALIDATED="false"
+  BROWSER_RUNTIME_ACTIVE="false"
+
+  if [ "${BROWSER_MODE}" != "local" ]; then
+    return
+  fi
+
+  if [ "${LOCAL_BROWSER_DETECTED}" != "true" ]; then
+    BROWSER_STATUS_REASON="local browser mode selected but ${LOCAL_BROWSER_EXECUTABLE_PATH} is unavailable"
+    return
+  fi
+
+  if ! wait_for_gateway_ready; then
+    BROWSER_STATUS_REASON="gateway did not become ready before local browser validation"
+    return
+  fi
+
+  local validation_log
+  validation_log="${STATE_DIR}/browser-validation.log"
+  if timeout 90s node scripts/run-node.mjs browser start --browser-profile openclaw >"${validation_log}" 2>&1; then
+    LOCAL_BROWSER_LAUNCH_VALIDATED="true"
+    BROWSER_RUNTIME_ACTIVE="true"
+    BROWSER_STATUS_REASON="local browser launch validated via openclaw browser start"
+    log "local browser launch validated using ${LOCAL_BROWSER_EXECUTABLE_PATH}"
+  else
+    local error_line
+    error_line="$(tail -n 20 "${validation_log}" 2>/dev/null | tr '\n' ' ' | sed 's/[[:space:]]\+/ /g; s/^ //; s/ $//')"
+    if [ -z "${error_line}" ]; then
+      error_line="openclaw browser start failed"
+    fi
+    BROWSER_STATUS_REASON="local browser launch validation failed: ${error_line}"
+    LAST_RELOAD_ERROR="${BROWSER_STATUS_REASON}"
+    log "${BROWSER_STATUS_REASON}"
+  fi
+}
+
+prepare_reload_request() {
+  local reason="manual"
+
+  if [ -f "${RELOAD_REASON_FILE}" ]; then
+    reason="$(tr -d '\r\n' < "${RELOAD_REASON_FILE}")"
+    rm -f "${RELOAD_REASON_FILE}" 2>/dev/null || true
+  fi
+  if [ -z "${reason}" ]; then
+    reason="manual"
+  fi
+
+  LAST_RELOAD_REASON="${reason}"
+  LAST_RELOAD_RESULT="pending"
+  LAST_RELOAD_ERROR=""
+  RELOAD_PENDING="true"
+  RELOAD_FALLBACK_USED="false"
+
+  apply_runtime_reconciliation || true
+  refresh_ingress_surfaces
+  write_runtime_status
+
+  if [ -n "${child_pid}" ]; then
+    if ! pkill -USR1 -P "${child_pid}" 2>/dev/null; then
+      kill -USR1 "${child_pid}" 2>/dev/null || true
+    fi
+    log "forwarded SIGUSR1 to gateway process (reason=${LAST_RELOAD_REASON})"
+  else
+    log "reload requested with no active gateway child (reason=${LAST_RELOAD_REASON})"
+  fi
+}
+
+shutdown_child() {
+  if [ -n "${watcher_pid}" ]; then
+    kill -TERM "${watcher_pid}" 2>/dev/null || true
+  fi
+  stop_terminal_ui_background
+  if [ -n "${tail_pid}" ]; then
+    kill -TERM "${tail_pid}" 2>/dev/null || true
+  fi
+  if [ -n "${child_pid}" ]; then
+    kill -TERM "${child_pid}" 2>/dev/null || true
+  fi
+}
+
+watch_runtime_changes() {
+  local last_digest="$1"
+
+  while true; do
+    sleep 3
+    local origins_json
+    local next_state
+    local next_digest
+
+    origins_json="$(read_homeassistant_control_ui_origins_json || true)"
+    if [ -z "${origins_json}" ]; then
+      origins_json='[]'
+    fi
+
+    next_state="$(run_reconcile "${origins_json}")" || continue
+    next_digest="$(printf '%s' "${next_state}" | jq -r '.runtimeDigest // ""' 2>/dev/null || true)"
+    if [ -z "${next_digest}" ]; then
+      continue
+    fi
+
+    if [ "${next_digest}" != "${last_digest}" ]; then
+      printf "config_changed\n" > "${RELOAD_REASON_FILE}"
+      kill -USR1 "${SUPERVISOR_PID}" 2>/dev/null || true
+      last_digest="${next_digest}"
+    fi
+  done
+}
+
+apply_runtime_reconciliation
+refresh_ingress_surfaces
+start_ingress_proxy
+
+if [ ! -f "${OPENCLAW_CONFIG_PATH}" ]; then
+  log "openclaw.json missing; starting onboarding terminal UI on port ${TERMINAL_UI_PORT}"
+  copy_terminal_ui_files
+  OPENCLAW_TERMINAL_MODE="onboarding" node "${REPO_DIR}/onboarding.mjs" "${TERMINAL_UI_PORT}"
+fi
+
+log "this add-on is the gateway supervisor; upstream openclaw gateway restart does not control the live runtime here"
+
+apply_runtime_reconciliation
+refresh_ingress_surfaces
+write_runtime_status
+
+trap prepare_reload_request USR1
 trap shutdown_child TERM INT
 
+watch_runtime_changes "${CURRENT_RUNTIME_DIGEST}" &
+watcher_pid=$!
+
+export OPENCLAW_NO_RESPAWN=1
+
 while true; do
+  apply_runtime_reconciliation
+  refresh_ingress_surfaces
+  compute_gateway_args
+
+  LOCAL_BROWSER_LAUNCH_VALIDATED="$(printf '%s' "${RUNTIME_STATE_JSON}" | jq -r '.localBrowserLaunchValidated // false' 2>/dev/null || printf 'false')"
+  BROWSER_RUNTIME_ACTIVE="$(printf '%s' "${RUNTIME_STATE_JSON}" | jq -r '.browserRuntimeActive // false' 2>/dev/null || printf 'false')"
+
+  child_pid=""
+  write_runtime_status
+
   node scripts/run-node.mjs "${ARGS[@]}" &
   child_pid=$!
   start_log_tail "${LOG_FILE}"
+  write_runtime_status
+
+  if wait_for_gateway_ready; then
+    if [ "${LAST_RELOAD_RESULT}" = "pending" ]; then
+      LAST_RELOAD_RESULT="success"
+    fi
+  else
+    log "gateway health check did not report ready within the expected window"
+  fi
+
+  validate_local_browser_runtime
+  RELOAD_PENDING="false"
+  RELOAD_FALLBACK_USED="false"
+  write_runtime_status
+
   set +e
   wait "${child_pid}"
   status=$?
   set -e
+
   if [ -n "${tail_pid}" ]; then
     kill -TERM "${tail_pid}" 2>/dev/null || true
     tail_pid=""
   fi
 
   if [ "${status}" -eq 0 ]; then
+    LAST_RELOAD_RESULT="success"
+    LAST_RELOAD_ERROR=""
+    BROWSER_RUNTIME_ACTIVE="false"
+    child_pid=""
+    write_runtime_status
     log "gateway exited cleanly"
     break
-  elif [ "${status}" -eq 129 ]; then
+  fi
+
+  if [ "${status}" -eq 129 ]; then
+    child_pid=""
+    BROWSER_RUNTIME_ACTIVE="false"
+    write_runtime_status
     log "gateway exited after SIGUSR1; restarting"
     continue
-  else
-    log "gateway exited uncleanly (status=${status}); restarting"
+  fi
+
+  if [ "${RELOAD_PENDING}" = "true" ] && [ "${RELOAD_FALLBACK_USED}" = "false" ]; then
+    LAST_RELOAD_RESULT="failure"
+    LAST_RELOAD_ERROR="gateway exited uncleanly during reload with status=${status}; performing fallback restart"
+    RELOAD_FALLBACK_USED="true"
+    child_pid=""
+    BROWSER_RUNTIME_ACTIVE="false"
+    write_runtime_status
+    log "${LAST_RELOAD_ERROR}"
     continue
   fi
+
+  LAST_RELOAD_RESULT="failure"
+  LAST_RELOAD_REASON="crash"
+  LAST_RELOAD_ERROR="gateway exited uncleanly with status=${status}"
+  child_pid=""
+  BROWSER_RUNTIME_ACTIVE="false"
+  write_runtime_status
+  log "${LAST_RELOAD_ERROR}; restarting"
 done
 
 exit "${status}"

@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.5.0
+
+- **Feature**: Make the add-on the canonical Gateway supervisor and config reload path.
+  - The add-on now watches semantic `openclaw.json` and supported add-on option changes instead of relying on upstream daemon or service restart semantics.
+  - Runtime truth is written to `/config/openclaw/.openclaw/addon-runtime-status.json`, including supervisor PID, child PID, digests, browser mode, reload state, and the last reload result or error.
+  - The add-on now logs explicitly that `openclaw gateway restart` is not the runtime control plane inside Home Assistant.
+- **Feature**: Add supported browser runtime modes.
+  - New add-on option: `browser_runtime_mode=node_host|local|remote_cdp|off`.
+  - `node_host` is the default supported mode.
+  - `local` is supported but opt-in in this first release.
+  - `remote_cdp` is supported for explicit remote browser endpoints.
+  - `off` disables browser runtime management.
+- **Feature**: Add baked-in local Chromium support for opt-in local browser mode.
+  - The add-on image now installs Chromium and wires `browser.executablePath=/usr/bin/chromium` when `browser_runtime_mode=local`.
+  - Local mode forces `browser.headless=true` and `browser.noSandbox=true` as a Home Assistant add-on container compatibility setting.
+  - Local browser launch is validated through `openclaw browser start` after the Gateway becomes ready.
+- **Docs**: Document browser modes, add-on-owned reload behavior, local browser tradeoffs, and rollback guidance.
+
 ## 0.4.24
 
 - **Fix**: Improve ingress Control UI WebSocket compatibility.
@@ -86,71 +104,71 @@
 
 - **Feature**: Add Home Assistant API integration.
   - Enable `hassio_api`, `homeassistant_api`, and `auth_api` for Supervisor access.
-  - Export `HA_URL` (http://supervisor/core/api) and `HA_TOKEN` env vars.
-  - Uses SUPERVISOR_TOKEN automatically, or user-provided `ha_token` option.
+  - Export `HA_URL` (`http://supervisor/core/api`) and `HA_TOKEN` env vars.
+  - Uses `SUPERVISOR_TOKEN` automatically, or the user-provided `ha_token` option.
   - OpenClaw can now interact with Home Assistant entities and services.
 
 ## 0.4.12
 
 - **Fix**: Auto-configure `gateway.trustedProxies` for nginx reverse proxy.
-  - The gateway was rejecting connections because it didn't trust nginx's proxy headers.
+  - The gateway was rejecting connections because it did not trust nginx's proxy headers.
   - Now trusts `127.0.0.1` and `172.30.32.0/24` (HA Supervisor network).
 
 ## 0.4.11
 
-- **Fix**: Auto-enable `gateway.controlUi.allowInsecureAuth: true` for HA Ingress.
+- **Fix**: Auto-enable `gateway.controlUi.allowInsecureAuth=true` for HA ingress.
   - Ingress uses HTTP internally, which triggers OpenClaw's secure context check.
   - This setting allows token-only auth over HTTP.
 
 ## 0.4.10
 
-- **Fix**: Disable `host_network` for proper Ingress support.
-  - Ingress requires standard Docker networking to reach add-on via internal IP.
-  - SSH port (2222) is now exposed via port mapping instead.
+- **Fix**: Disable `host_network` for proper ingress support.
+  - Ingress requires standard Docker networking to reach the add-on via internal IP.
+  - SSH port `2222` is now exposed via port mapping instead.
   - Added `proxy_buffering off` to nginx for better WebSocket support.
 
 ## 0.4.9
 
-- **Fix**: Add nginx reverse proxy to enable HA Ingress with `host_network: true`.
-  - nginx binds to `0.0.0.0:8099` and forwards to gateway on `127.0.0.1:18789`.
-  - `ingress_port` changed to 8099 to match nginx.
-  - Removed invalid `--host` flag and `HOST` env var (didn't work).
+- **Fix**: Add nginx reverse proxy to enable HA ingress with `host_network: true`.
+  - nginx binds to `0.0.0.0:8099` and forwards to the gateway on `127.0.0.1:18789`.
+  - `ingress_port` changed to `8099` to match nginx.
+  - Removed invalid `--host` flag and `HOST` environment variable.
 
 ## 0.4.8
 
-- **Fix**: Use `HOST=0.0.0.0` environment variable instead of `--host` flag (which doesn't exist).
+- **Fix**: Use `HOST=0.0.0.0` environment variable instead of `--host`.
 
 ## 0.4.7
 
-- **Fix**: Gateway now binds to `0.0.0.0` instead of `127.0.0.1` so HA Ingress can reach it.
+- **Fix**: Gateway now binds to `0.0.0.0` instead of `127.0.0.1` so HA ingress can reach it.
 
 ## 0.4.6
 
 - **Fix**: Replace `node-pty` with built-in `child_process` to avoid native module loading issues.
-- **Fix**: Use compatible `import.meta.url` approach for ESM path resolution.
-- **Added**: Extensive logging in onboarding server for easier debugging.
+- **Fix**: Use compatible `import.meta.url` path resolution.
+- **Added**: Extensive onboarding server logging for debugging.
 
 ## 0.4.5
 
-- **Reverted**: Removed Antigravity User-Agent fix (did not work as expected).
+- **Reverted**: Removed Antigravity User-Agent fix.
 - **Fix**: Onboarding UI now starts correctly.
   - Read `port` from options before launching the onboarding server.
-  - Copy onboarding files into `REPO_DIR` so native modules (`node-pty`) can be loaded.
+  - Copy onboarding files into `REPO_DIR` so native modules can be loaded.
 
 ## 0.4.0
 
-- Major: Add Home Assistant Sidebar integration (`panel: true`).
-- Feature: New interactive Onboarding UI with embedded terminal (`xterm.js`).
+- Major: Add Home Assistant sidebar integration (`panel: true`).
+- Feature: New interactive onboarding UI with embedded terminal (`xterm.js`).
 - Feature: Auto-reload logic to transition from setup to the OpenClaw Dashboard.
-- Fix: Gateway now uses `ingress` for secure internal proxy access.
+- Fix: Gateway now uses ingress for secure internal proxy access.
 
 ## 0.3.21
 
-- Fix: CLI invocation now uses `node scripts/run-node.mjs` instead of `pnpm exec openclaw` to match how the openclaw monorepo runs its CLI.
+- Fix: CLI invocation now uses `node scripts/run-node.mjs` instead of `pnpm exec openclaw`.
 
 ## 0.3.0
 
-- BREAKING: Migrated from Clawdbot to OpenClaw (https://github.com/openclaw/openclaw)
+- BREAKING: Migrated from Clawdbot to OpenClaw (`https://github.com/openclaw/openclaw`)
 - Renamed addon slug from `clawdbot_gateway` to `openclaw_gateway`
 - Updated all paths from `/config/clawdbot` to `/config/openclaw`
 - Updated CLI commands from `clawdbot` to `openclaw`
@@ -159,7 +177,7 @@
 
 ## 0.2.15
 
-- Fix: install dev dependencies so gateway builds include tsc. (#9)
+- Fix: install dev dependencies so gateway builds include `tsc`. (#9)
 
 ## 0.2.14
 
@@ -167,8 +185,8 @@
 
 ## 0.2.13
 
-- Add icon.png and logo.png (cyber-lobster mascot).
-- Add DOCS.md with detailed documentation.
+- Add `icon.png` and `logo.png`.
+- Add `DOCS.md` with detailed documentation.
 - Simplify README.md as add-on store intro.
 - Follow Home Assistant add-on presentation best practices.
 
@@ -179,12 +197,12 @@
 ## 0.2.11
 
 - Docker: install GitHub CLI.
-- Storage: persist root home directories under /config/clawdbot.
-- Docker: refresh base image/toolchain and update gogcli. Thanks @niemyjski! (PR #2)
+- Storage: persist root home directories under `/config/clawdbot`.
+- Docker: refresh base image and toolchain, and update gogcli. Thanks @niemyjski. (PR #2)
 
 ## 0.2.10
 
-- Fix: remove unsupported pnpm install flag in add-on image.
+- Fix: remove unsupported pnpm install flag in the add-on image.
 
 ## 0.2.9
 
@@ -200,34 +218,34 @@
 
 ## 0.2.6
 
-- Auto-restart gateway on unclean exits (e.g., shutdown timeout).
+- Auto-restart gateway on unclean exits.
 
 ## 0.2.5
 
-- BREAKING: Renamed `repo_ref` to `branch`. Set to track a specific branch; omit to use repo's default.
-- Config: `github_token` now uses password field (masked in UI).
+- BREAKING: Renamed `repo_ref` to `branch`. Set it to track a specific branch; omit it to use the repo default.
+- Config: `github_token` now uses a password field.
 
 ## 0.2.4
 
 - Docs: repo-based install steps and add-on info links.
-- Docker: set WORKDIR to /opt/clawdbot.
-- Logs: stream gateway log file into add-on stdout.
+- Docker: set `WORKDIR` to `/opt/clawdbot`.
+- Logs: stream the gateway log file into add-on stdout.
 - Docker: add ripgrep for faster log searches.
 
 ## 0.2.3
 
 - Docs: repo-based install steps and add-on info links.
-- Docker: set WORKDIR to /opt/clawdbot.
-- Logs: stream gateway log file into add-on stdout.
+- Docker: set `WORKDIR` to `/opt/clawdbot`.
+- Logs: stream the gateway log file into add-on stdout.
 
 ## 0.2.2
 
-- Add HA add-on repository layout and improved SIGUSR1 handling.
+- Add HA add-on repository layout and improved `SIGUSR1` handling.
 - Support pinning upstream refs and clean checkouts.
 
 ## 0.2.1
 
-- Ensure gateway.mode=local on first boot.
+- Ensure `gateway.mode=local` on first boot.
 
 ## 0.2.0
 

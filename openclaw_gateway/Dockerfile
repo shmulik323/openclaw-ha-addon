@@ -9,6 +9,7 @@ RUN apt-get update \
   && apt-get install -y --no-install-recommends \
   bash \
   ca-certificates \
+  chromium \
   git \
   jq \
   ripgrep \
@@ -56,6 +57,7 @@ WORKDIR /opt/openclaw
 
 COPY onboarding.mjs /onboarding.mjs
 COPY onboarding.html /onboarding.html
+COPY runtime-helper.mjs /runtime-helper.mjs
 COPY nginx.conf /nginx.conf.tpl
 COPY run.sh /run.sh
 RUN chmod +x /run.sh
