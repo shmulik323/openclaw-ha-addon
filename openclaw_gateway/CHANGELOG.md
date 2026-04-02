@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.21
+
+- **Fix**: Make the ingress Control UI connect automatically after onboarding.
+  - Preserve the full Home Assistant host header, including port, through the ingress proxy.
+  - Enable Control UI Host-header origin fallback for the Home Assistant ingress origin.
+  - Inject the generated gateway token into the browser URL fragment on first ingress load so the dashboard can connect without manual token copy/paste.
+
 ## 0.4.20
 
 - **Fix**: Allow the OpenClaw Control UI to render inside Home Assistant ingress after onboarding.

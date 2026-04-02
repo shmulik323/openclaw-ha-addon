@@ -47,6 +47,8 @@ The add-on performs these steps on startup:
 After onboarding exits, the same ingress panel proxies the OpenClaw Control UI.
 The add-on strips the upstream anti-framing headers on the ingress proxy only so
 Home Assistant can keep rendering the Control UI inside its iframe-based add-on panel.
+It also injects the generated gateway token into the URL fragment on first load so
+the dashboard can connect without manual token entry after onboarding.
 
 ### OpenClaw Configuration
 
@@ -127,6 +129,13 @@ The ingress listener is intended for Home Assistant's internal proxy only.
 The Control UI must be rendered through the Home Assistant add-on panel, not by
 connecting directly to the internal ingress port. If the panel still stays blank,
 confirm the add-on log shows the latest `run.sh version=` line after updating.
+
+### The Control UI loads but won't connect
+
+Ingress relies on the Home Assistant host header and origin. The add-on now preserves
+the full forwarded host and auto-seeds the generated token into the dashboard URL on
+first ingress load. If the page still shows a disconnected gateway after updating,
+refresh the add-on page once so the new token bootstrap script can run.
 
 ### Gateway won't start
 

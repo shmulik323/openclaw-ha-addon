@@ -5,7 +5,7 @@ log() {
   printf "[addon] %s\n" "$*"
 }
 
-log "run.sh version=2026-04-02-ingress-control-ui-frame-fix"
+log "run.sh version=2026-04-02-ingress-control-ui-connect-fix"
 
 BASE_DIR=/config/openclaw
 STATE_DIR="${BASE_DIR}/.openclaw"
@@ -211,7 +211,21 @@ if [ -z "${PORT}" ] || [ "${PORT}" = "null" ]; then
 fi
 
 render_ingress_proxy() {
-  sed "s/__UPSTREAM_PORT__/${PORT}/g" /nginx.conf.tpl > /etc/nginx/sites-enabled/openclaw.conf
+  local token_b64=''
+  if [ -f "${OPENCLAW_CONFIG_PATH}" ]; then
+    token_b64="$(read_gateway_auth_token_b64 || true)"
+    if [ -z "${token_b64}" ]; then
+      token_b64=''
+    fi
+  fi
+
+  PORT="${PORT}" GATEWAY_TOKEN_B64="${token_b64}" node -e "
+    const fs = require('fs');
+    let template = fs.readFileSync('/nginx.conf.tpl', 'utf8');
+    template = template.replaceAll('__UPSTREAM_PORT__', process.env.PORT);
+    template = template.replace('__GATEWAY_TOKEN_B64__', process.env.GATEWAY_TOKEN_B64 || '');
+    fs.writeFileSync('/etc/nginx/sites-enabled/openclaw.conf', template);
+  "
 }
 
 start_ingress_proxy() {
@@ -322,6 +336,41 @@ ensure_trusted_proxies() {
   " 2>/dev/null
 }
 
+read_gateway_auth_token_b64() {
+  node -e "
+    const fs=require('fs');
+    const JSON5=require('json5');
+    const p=process.env.OPENCLAW_CONFIG_PATH;
+    const raw=fs.readFileSync(p,'utf8');
+    const data=JSON5.parse(raw);
+    const gateway=data.gateway||{};
+    const auth=gateway.auth||{};
+    const token=String(auth.token||'').trim();
+    process.stdout.write(Buffer.from(token, 'utf8').toString('base64'));
+  " 2>/dev/null
+}
+
+ensure_control_ui_origin_fallback() {
+  node -e "
+    const fs=require('fs');
+    const JSON5=require('json5');
+    const p=process.env.OPENCLAW_CONFIG_PATH;
+    const raw=fs.readFileSync(p,'utf8');
+    const data=JSON5.parse(raw);
+    const gateway=data.gateway||{};
+    const controlUi=gateway.controlUi||{};
+    if(controlUi.dangerouslyAllowHostHeaderOriginFallback!==true){
+      controlUi.dangerouslyAllowHostHeaderOriginFallback=true;
+      gateway.controlUi=controlUi;
+      data.gateway=gateway;
+      fs.writeFileSync(p, JSON.stringify(data,null,2)+'\\n');
+      console.log('updated');
+    }else{
+      console.log('unchanged');
+    }
+  " 2>/dev/null
+}
+
 if [ -f "${OPENCLAW_CONFIG_PATH}" ]; then
   mode_status="$(ensure_gateway_mode || true)"
   if [ "${mode_status}" = "updated" ]; then
@@ -378,6 +427,18 @@ if [ -f "${OPENCLAW_CONFIG_PATH}" ]; then
     log "gateway.trustedProxies already set"
   fi
 fi
+
+if [ -f "${OPENCLAW_CONFIG_PATH}" ]; then
+  origin_status="$(ensure_control_ui_origin_fallback || true)"
+  if [ "${origin_status}" = "updated" ]; then
+    log "gateway.controlUi.dangerouslyAllowHostHeaderOriginFallback set to true (for Ingress)"
+  elif [ "${origin_status}" = "unchanged" ]; then
+    log "gateway.controlUi.dangerouslyAllowHostHeaderOriginFallback already set"
+  fi
+fi
+
+render_ingress_proxy
+nginx -s reload >/dev/null 2>&1 || true
 
 VERBOSE="$(jq -r .verbose /data/options.json)"
 LOG_FORMAT="$(jq -r '.log_format // empty' /data/options.json 2>/dev/null || true)"
