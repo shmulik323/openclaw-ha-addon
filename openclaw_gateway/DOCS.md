@@ -139,11 +139,17 @@ cd /config/openclaw/openclaw-src
 pnpm exec openclaw onboard
 ```
 
+Prefer `pnpm exec` (or `node scripts/run-node.mjs …`) from this directory; the add-on strips pnpm-only `.npmrc` keys after clone so plain `npm exec` does not warn, but pnpm remains the supported package manager for OpenClaw.
+
 You can also use:
 
 ```bash
 pnpm exec openclaw configure
 ```
+
+If onboarding offers **Anthropic Claude CLI** authentication, the `claude` binary is installed in the image. Run `claude auth login` once in SSH or the ingress terminal before choosing that path, or pick an API-key-based option instead.
+
+For **Google Gemini CLI OAuth**, the `gemini` command is installed globally; complete the browser OAuth step from the prompt (open the URL on your own machine, then paste the redirect URL back into the terminal).
 
 The add-on auto-reloads semantic config changes through its own supervisor loop.
 Use a full add-on restart when you change build-time behavior such as repository checkout, SSH server setup, or the baked-in image itself:
@@ -206,6 +212,9 @@ Use `pnpm exec openclaw configure` or `pnpm exec openclaw onboard` to set it in 
 
 ## Included Tools
 
+- **pnpm** — Installed globally (`npm install -g pnpm`); always on `PATH` via `/usr/local/bin` in the image and add-on runtime
+- **claude** — Anthropic Claude Code CLI (`@anthropic-ai/claude-code`), for onboarding flows that use Claude CLI auth
+- **gemini** — Google Gemini CLI (`@google/gemini-cli`), for onboarding flows that use Gemini CLI OAuth
 - **gog** — Google Workspace CLI ([gogcli.sh](https://gogcli.sh))
 - **gh** — GitHub CLI ([cli.github.com](https://cli.github.com))
 - **hass-cli** — Home Assistant CLI

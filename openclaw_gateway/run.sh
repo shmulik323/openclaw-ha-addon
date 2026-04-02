@@ -5,7 +5,7 @@ log() {
   printf "[addon] %s\n" "$*"
 }
 
-log "run.sh version=2026-04-02-supervisor-browser-modes"
+log "run.sh version=2026-04-03-path-pnpm-local-bin"
 
 BASE_DIR=/config/openclaw
 STATE_DIR="${BASE_DIR}/.openclaw"
@@ -61,7 +61,8 @@ fi
 export HOME="${BASE_DIR}"
 export BUN_INSTALL="${BUN_INSTALL}"
 export PNPM_HOME="${PNPM_HOME}"
-export PATH="${BASE_DIR}/bin:${BUN_INSTALL}/bin:${PNPM_HOME}:${PATH}"
+# npm -g installs pnpm/claude under /usr/local/bin; keep that on PATH for HA supervisor + SSH.
+export PATH="${BASE_DIR}/bin:${BUN_INSTALL}/bin:${PNPM_HOME}:/usr/local/bin:/usr/local/sbin:${PATH}"
 export OPENCLAW_STATE_DIR="${STATE_DIR}"
 export OPENCLAW_CONFIG_PATH="${STATE_DIR}/openclaw.json"
 export HA_URL="http://supervisor/core/api/"
@@ -84,7 +85,7 @@ export HOME="${BASE_DIR}"
 export GH_CONFIG_DIR="${BASE_DIR}/.config/gh"
 export BUN_INSTALL="${BUN_INSTALL}"
 export PNPM_HOME="${PNPM_HOME}"
-export PATH="${BASE_DIR}/bin:${BUN_INSTALL}/bin:${PNPM_HOME}:\${PATH}"
+export PATH="${BASE_DIR}/bin:${BUN_INSTALL}/bin:${PNPM_HOME}:/usr/local/bin:/usr/local/sbin:\${PATH}"
 if [ -n "\${SSH_CONNECTION:-}" ]; then
   export OPENCLAW_STATE_DIR="${STATE_DIR}"
   export OPENCLAW_CONFIG_PATH="${STATE_DIR}/openclaw.json"
@@ -196,9 +197,16 @@ fi
 
 cd "${REPO_DIR}"
 
+# Upstream .npmrc sets node-linker=hoisted (pnpm-only). npm warns when users run
+# `npm exec` from this tree; drop the key and pass hoisted layout to pnpm explicitly.
+if [ -f "${REPO_DIR}/.npmrc" ]; then
+  sed -i 's/\r$//' "${REPO_DIR}/.npmrc" 2>/dev/null || true
+  sed -i '/^[[:space:]]*node-linker[[:space:]]*=/d' "${REPO_DIR}/.npmrc" 2>/dev/null || true
+fi
+
 log "installing dependencies"
 pnpm config set confirmModulesPurge false >/dev/null 2>&1 || true
-pnpm install --no-frozen-lockfile --prefer-frozen-lockfile --prod=false
+pnpm install --config.node-linker=hoisted --no-frozen-lockfile --prefer-frozen-lockfile --prod=false
 
 log "building gateway"
 pnpm build

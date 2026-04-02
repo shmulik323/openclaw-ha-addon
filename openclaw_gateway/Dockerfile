@@ -35,13 +35,17 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | d
 
 ENV BUN_INSTALL=/usr/local/bun
 ENV PNPM_HOME=/pnpm
-ENV PATH="/usr/local/bun/bin:/pnpm:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+# pnpm and other npm -g tools live under /usr/local/bin; keep that early so every shell finds them.
+ENV PATH="/usr/local/bin:/usr/local/sbin:/usr/local/bun/bin:/pnpm:/usr/sbin:/usr/bin:/sbin:/bin"
 
 RUN curl -fsSL https://bun.sh/install | bash
 
-RUN npm install -g pnpm \
+RUN npm install -g pnpm @anthropic-ai/claude-code @google/gemini-cli \
   && mkdir -p /pnpm \
-  && pnpm config set global-bin-dir /pnpm
+  && pnpm config set global-bin-dir /pnpm \
+  && command -v pnpm \
+  && pnpm --version \
+  && command -v gemini
 
 RUN pip3 install --no-cache-dir --break-system-packages homeassistant-cli
 

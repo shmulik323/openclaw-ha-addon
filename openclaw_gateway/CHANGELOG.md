@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.5.3
+
+- **Fix**: Ship Google Gemini CLI (`gemini`, `@google/gemini-cli`) globally so OpenClaw onboarding can use “Gemini CLI OAuth” inside the container.
+- **Fix**: Strip `node-linker` from the cloned repo `.npmrc` more defensively (optional whitespace, CRLF) so `npm exec` under `openclaw-src` stops warning after add-on sync.
+
+## 0.5.2
+
+- **Fix**: Remove pnpm-only `node-linker` from the cloned OpenClaw `.npmrc` after sync and pass `--config.node-linker=hoisted` to `pnpm install` so dependency layout stays stable while `npm exec` from `openclaw-src` no longer warns.
+- **Fix**: Ship the Anthropic Claude Code CLI (`claude`) in the image so OpenClaw onboarding can use the “Anthropic Claude CLI” auth path; run `claude auth login` in the add-on terminal or SSH session when that method is selected.
+- **Fix**: Put `/usr/local/bin` and `/usr/local/sbin` on `PATH` for the supervisor and SSH profile so globally installed `pnpm` (and `claude`) always resolve; Dockerfile `PATH` puts those dirs first and the image build fails if `pnpm` is missing.
+
 ## 0.5.1
 
 - **Fix**: Persist `gateway.nodes.browser.mode=auto` correctly in `node_host` mode.
