@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.12
+
+- **Feature**: Faster add-on restarts when OpenClaw upstream has not changed.
+  - After a successful build, persist a stamp at `/config/openclaw/.openclaw/openclaw-build-stamp` (commit, ref, `branch` option, canonical `repo_url`).
+  - When the stamp matches the tree after git sync and `node_modules` / `dist` outputs look valid, skip `pnpm install`, Playwright Chromium setup, `pnpm build`, and `pnpm ui:build`.
+  - New option `force_openclaw_rebuild` (default `false`) to always run the full install and build on start.
+
 ## 0.5.11
 
 - **Fix**: Stop the add-on supervisor from fighting a healthy in-process restarted Gateway.

@@ -41,6 +41,7 @@ The store build targets **amd64 (x86_64)** only. It is not published for ARM Hom
 | `gog_account` | Default Google account email for `gog` commands |
 | `gog_keyring_password` | Password used to unlock `gog` token storage non-interactively |
 | `repo_url` | OpenClaw source repository URL |
+| `force_openclaw_rebuild` | When `true`, always run `pnpm install`, Playwright (if applicable), and builds on add-on start; ignores the warm-start stamp |
 | `branch` | Branch to checkout, optional |
 | `github_token` | Token for private repository access |
 | `ha_token` | Optional manual Home Assistant API token override |
@@ -50,7 +51,7 @@ The store build targets **amd64 (x86_64)** only. It is not published for ARM Hom
 The add-on performs these steps on startup:
 
 1. Clones or updates the OpenClaw repo into `/config/openclaw/openclaw-src`
-2. Installs dependencies and builds the gateway
+2. Installs dependencies and builds the gateway (see warm start below)
 3. Starts the Home Assistant ingress proxy immediately
 4. If no config exists yet, serves the onboarding terminal UI through the add-on panel
 5. Reconciles add-on-owned runtime fields into `openclaw.json`
@@ -58,6 +59,8 @@ The add-on performs these steps on startup:
 7. Watches semantic config and supported add-on option changes, then reloads the child through the add-on supervisor
 
 After onboarding exits, `ingress_ui_mode=auto` switches the panel to the embedded Control UI once `openclaw.json` exists. Set `ingress_ui_mode=tui` to keep the add-on panel on `openclaw tui` instead.
+
+**Warm start (faster restarts):** After a successful install and build, the add-on writes `/config/openclaw/.openclaw/openclaw-build-stamp` with the current Git commit, checked-out ref, configured `branch` option, and canonical `repo_url`. On a later **full add-on or container start**, if that stamp still matches the repo after `git fetch`/`reset` and expected build outputs exist under `openclaw-src`, it skips `pnpm install`, the managed Playwright Chromium step, `pnpm build`, and `pnpm ui:build`. Set `force_openclaw_rebuild` to `true` (or delete the stamp file) to force a full rebuild. This option applies only when the add-on process starts from scratch, not when the supervisor reloads the Gateway child after config changes.
 
 ## Runtime Supervision
 

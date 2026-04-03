@@ -5,7 +5,7 @@ log() {
   printf "[addon] %s\n" "$*"
 }
 
-log "run.sh version=2026-04-03-playwright-amd64"
+log "run.sh version=2026-04-03-build-stamp-fastpath"
 
 BASE_DIR=/config/openclaw
 STATE_DIR="${BASE_DIR}/.openclaw"
@@ -17,6 +17,7 @@ PNPM_HOME="${PNPM_HOME:-/pnpm}"
 TERMINAL_UI_PORT=18080
 RUNTIME_HELPER=/runtime-helper.mjs
 STATUS_FILE="${STATE_DIR}/addon-runtime-status.json"
+OPENCLAW_BUILD_STAMP_FILE="${STATE_DIR}/openclaw-build-stamp"
 RELOAD_REASON_FILE="${STATE_DIR}/addon-reload-reason"
 LOCAL_BROWSER_EXECUTABLE=/usr/bin/chromium
 SUPERVISOR_PID="$$"
@@ -121,6 +122,7 @@ auth_from_opts() {
 }
 
 REPO_URL="$(jq -r .repo_url /data/options.json)"
+REPO_URL_OPTS="${REPO_URL}"
 BRANCH="$(jq -r .branch /data/options.json 2>/dev/null || true)"
 TOKEN_OPT="$(jq -r .github_token /data/options.json)"
 
@@ -131,6 +133,12 @@ fi
 
 if [ -n "${TOKEN_OPT}" ] && [ "${TOKEN_OPT}" != "null" ]; then
   REPO_URL="https://${TOKEN_OPT}@${REPO_URL#https://}"
+fi
+
+FORCE_OPENCLAW_REBUILD_RAW="$(jq -r '.force_openclaw_rebuild // false' /data/options.json 2>/dev/null || printf 'false\n')"
+FORCE_OPENCLAW_REBUILD="false"
+if [ "${FORCE_OPENCLAW_REBUILD_RAW}" = "true" ]; then
+  FORCE_OPENCLAW_REBUILD="true"
 fi
 
 SSH_PORT="$(jq -r .ssh_port /data/options.json 2>/dev/null || true)"
@@ -221,9 +229,28 @@ if [ -f "${REPO_DIR}/.npmrc" ]; then
   sed -i '/^[[:space:]]*node-linker[[:space:]]*=/d' "${REPO_DIR}/.npmrc" 2>/dev/null || true
 fi
 
-log "installing dependencies"
-pnpm config set confirmModulesPurge false >/dev/null 2>&1 || true
-pnpm install --config.node-linker=hoisted --no-frozen-lockfile --prefer-frozen-lockfile --prod=false
+openclaw_build_stamp_write() {
+  local git_ref
+  git_ref="$(git -C "${REPO_DIR}" rev-parse --abbrev-ref HEAD 2>/dev/null || printf 'HEAD\n')"
+  printf 'commit=%s\nref=%s\nbranch_opt=%s\nrepo=%s\n' \
+    "$(git -C "${REPO_DIR}" rev-parse HEAD 2>/dev/null || printf 'unknown\n')" \
+    "${git_ref}" \
+    "${BRANCH}" \
+    "${REPO_URL_OPTS}"
+}
+
+openclaw_build_outputs_ok() {
+  [ -f "${REPO_DIR}/scripts/run-node.mjs" ] || return 1
+  [ -d "${REPO_DIR}/node_modules" ] || return 1
+  if [ -z "$(find "${REPO_DIR}/node_modules" -mindepth 1 -maxdepth 1 2>/dev/null | head -1)" ]; then
+    return 1
+  fi
+  [ -f "${REPO_DIR}/dist/control-ui/index.html" ] || return 1
+  if [ -z "$(find "${REPO_DIR}/dist" -maxdepth 5 \( -name '*.mjs' -o -name '*.js' \) -type f 2>/dev/null | head -1)" ]; then
+    return 1
+  fi
+  return 0
+}
 
 ensure_playwright_chromium_bundle() {
   local pw_cli="${REPO_DIR}/node_modules/playwright-core/cli.js"
@@ -257,16 +284,39 @@ ensure_playwright_chromium_bundle() {
   fi
 }
 
-ensure_playwright_chromium_bundle
-
-log "building gateway"
-pnpm build
-if [ ! -d "${REPO_DIR}/ui/node_modules" ]; then
-  log "installing UI dependencies"
-  pnpm ui:install
+SKIP_OPENCLAW_BUILD=""
+if [ "${FORCE_OPENCLAW_REBUILD}" = "true" ]; then
+  log "force_openclaw_rebuild enabled; running full install and build"
+else
+  stamp_tmp="$(mktemp)"
+  openclaw_build_stamp_write > "${stamp_tmp}"
+  if [ -f "${OPENCLAW_BUILD_STAMP_FILE}" ] && cmp -s "${OPENCLAW_BUILD_STAMP_FILE}" "${stamp_tmp}" && openclaw_build_outputs_ok; then
+    SKIP_OPENCLAW_BUILD="1"
+    log "OpenClaw tree matches last successful build; skipping pnpm install, Playwright, and builds"
+  fi
+  rm -f "${stamp_tmp}"
 fi
-log "building control UI"
-pnpm ui:build
+
+if [ -n "${SKIP_OPENCLAW_BUILD}" ]; then
+  :
+else
+  log "installing dependencies"
+  pnpm config set confirmModulesPurge false >/dev/null 2>&1 || true
+  pnpm install --config.node-linker=hoisted --no-frozen-lockfile --prefer-frozen-lockfile --prod=false
+
+  ensure_playwright_chromium_bundle
+
+  log "building gateway"
+  pnpm build
+  if [ ! -d "${REPO_DIR}/ui/node_modules" ]; then
+    log "installing UI dependencies"
+    pnpm ui:install
+  fi
+  log "building control UI"
+  pnpm ui:build
+
+  openclaw_build_stamp_write > "${OPENCLAW_BUILD_STAMP_FILE}"
+fi
 
 copy_terminal_ui_files() {
   cp /onboarding.mjs "${REPO_DIR}/onboarding.mjs"

@@ -1,6 +1,6 @@
 {
   "name": "OpenClaw Gateway",
-  "version": "0.5.11",
+  "version": "0.5.12",
   "slug": "openclaw_gateway",
   "description": "OpenClaw Gateway with Home Assistant ingress onboarding",
   "url": "https://github.com/shmulik323/openclaw-ha-addon",
@@ -38,6 +38,7 @@
     "gog_account": "",
     "gog_keyring_password": "",
     "repo_url": "https://github.com/openclaw/openclaw.git",
+    "force_openclaw_rebuild": false,
     "branch": "",
     "github_token": "",
     "ssh_port": 2222,
@@ -57,6 +58,7 @@
     "gog_account": "str?",
     "gog_keyring_password": "password?",
     "repo_url": "str",
+    "force_openclaw_rebuild": "bool",
     "branch": "str?",
     "github_token": "password?",
     "ssh_port": "int(1,65535)",
