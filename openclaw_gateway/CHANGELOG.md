@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.11
+
+- **Fix**: Stop the add-on supervisor from fighting a healthy in-process restarted Gateway.
+  - When the launcher exits cleanly but a healthy Gateway listener is still active on `127.0.0.1:18789`, the add-on now adopts that listener instead of spawning duplicates.
+  - Reload signals now target the active listener PID when the original launcher process has already exited.
+  - Stale listener teardown now targets the actual port owner PID directly instead of relying on `openclaw gateway stop` in this supervised environment.
+- **Fix**: Use the current browser CLI flag order for local browser validation.
+  - Call `openclaw browser --browser-profile openclaw start` through `node scripts/run-node.mjs` so local mode validation no longer fails on `unknown option '--browser-profile'`.
+
 ## 0.5.10
 
 - **Fix**: Add non-interactive `gog` keyring support for Home Assistant tool runs.

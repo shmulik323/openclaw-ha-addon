@@ -20,6 +20,7 @@ STATUS_FILE="${STATE_DIR}/addon-runtime-status.json"
 RELOAD_REASON_FILE="${STATE_DIR}/addon-reload-reason"
 LOCAL_BROWSER_EXECUTABLE=/usr/bin/chromium
 SUPERVISOR_PID="$$"
+ACTIVE_GATEWAY_PID=""
 
 mkdir -p "${BASE_DIR}" "${STATE_DIR}" "${WORKSPACE_DIR}" "${SSH_AUTH_DIR}" "${PNPM_HOME}"
 
@@ -470,6 +471,8 @@ write_runtime_status() {
   local child_json='null'
   if [ -n "${child_pid}" ]; then
     child_json="${child_pid}"
+  elif [ -n "${ACTIVE_GATEWAY_PID}" ]; then
+    child_json="${ACTIVE_GATEWAY_PID}"
   fi
 
   printf '%s' "${RUNTIME_STATE_JSON}" \
@@ -614,14 +617,109 @@ gateway_listener_healthy() {
   curl -fsS "http://127.0.0.1:${PORT}/healthz" >/dev/null 2>&1
 }
 
+find_gateway_listener_pid() {
+  local pid=""
+
+  if command -v ss >/dev/null 2>&1; then
+    pid="$(ss -ltnp "sport = :${PORT}" 2>/dev/null | sed -n 's/.*pid=\([0-9][0-9]*\).*/\1/p' | head -n 1)"
+  fi
+
+  if [ -z "${pid}" ] && command -v lsof >/dev/null 2>&1; then
+    pid="$(lsof -tiTCP:"${PORT}" -sTCP:LISTEN 2>/dev/null | head -n 1)"
+  fi
+
+  printf '%s' "${pid}"
+}
+
 # Ask OpenClaw to release the gateway port before we spawn again (covers reload races where
 # the supervised node exited but a worker still held 18789).
 request_gateway_listener_teardown() {
-  (
-    cd "${REPO_DIR}" || exit 0
-    timeout 40s node scripts/run-node.mjs gateway stop 2>/dev/null
-  ) || true
-  sleep 1
+  local pid
+  pid="$(find_gateway_listener_pid || true)"
+  if [ -z "${pid}" ]; then
+    return 0
+  fi
+
+  log "requesting gateway listener teardown on port ${PORT} (pid=${pid})"
+  kill -TERM "${pid}" 2>/dev/null || true
+
+  local attempt
+  for attempt in $(seq 1 10); do
+    if ! gateway_listener_healthy; then
+      return 0
+    fi
+    sleep 1
+  done
+
+  if gateway_listener_healthy; then
+    log "gateway listener on port ${PORT} ignored SIGTERM; forcing stop (pid=${pid})"
+    kill -KILL "${pid}" 2>/dev/null || true
+    sleep 1
+  fi
+}
+
+adopt_existing_gateway_listener() {
+  local pid
+  pid="$(find_gateway_listener_pid || true)"
+  if [ -z "${pid}" ]; then
+    return 1
+  fi
+
+  ACTIVE_GATEWAY_PID="${pid}"
+  child_pid=""
+  RELOAD_PENDING="false"
+  LAST_RELOAD_RESULT="success"
+  LAST_RELOAD_ERROR=""
+  log "adopting existing gateway listener on port ${PORT} (pid=${ACTIVE_GATEWAY_PID})"
+  write_runtime_status
+  return 0
+}
+
+monitor_active_gateway_listener() {
+  local missed_probes=0
+  local max_missed_probes=3
+  local max_reload_missed_probes=45
+
+  while true; do
+    if gateway_listener_healthy; then
+      if [ "${RELOAD_PENDING}" = "true" ]; then
+        LAST_RELOAD_RESULT="success"
+        LAST_RELOAD_ERROR=""
+        RELOAD_PENDING="false"
+      fi
+
+      missed_probes=0
+      local pid
+      pid="$(find_gateway_listener_pid || true)"
+      if [ -n "${pid}" ]; then
+        ACTIVE_GATEWAY_PID="${pid}"
+      fi
+      write_runtime_status
+      sleep 2
+      continue
+    fi
+
+    missed_probes=$((missed_probes + 1))
+    if [ "${RELOAD_PENDING}" = "true" ] && [ "${missed_probes}" -lt "${max_reload_missed_probes}" ]; then
+      sleep 2
+      continue
+    fi
+
+    if [ "${RELOAD_PENDING}" != "true" ] && [ "${missed_probes}" -lt "${max_missed_probes}" ]; then
+      sleep 2
+      continue
+    fi
+
+    break
+  done
+
+  if [ "${RELOAD_PENDING}" = "true" ]; then
+    LAST_RELOAD_RESULT="failure"
+    LAST_RELOAD_ERROR="gateway listener did not return after reload signal"
+  fi
+
+  ACTIVE_GATEWAY_PID=""
+  write_runtime_status
 }
 
 ensure_no_preexisting_gateway_listener() {
@@ -658,7 +756,7 @@ validate_local_browser_runtime() {
 
   local validation_log
   validation_log="${STATE_DIR}/browser-validation.log"
-  if timeout 90s node scripts/run-node.mjs browser start --browser-profile openclaw >"${validation_log}" 2>&1; then
+  if timeout 90s node scripts/run-node.mjs browser --browser-profile openclaw start >"${validation_log}" 2>&1; then
     LOCAL_BROWSER_LAUNCH_VALIDATED="true"
     BROWSER_RUNTIME_ACTIVE="true"
     BROWSER_STATUS_REASON="local browser launch validated via openclaw browser start"
@@ -696,12 +794,21 @@ prepare_reload_request() {
   refresh_ingress_surfaces
   write_runtime_status
 
-  if [ -n "${child_pid}" ]; then
+  local target_pid=""
+  if [ -n "${child_pid}" ] && kill -0 "${child_pid}" 2>/dev/null; then
+    target_pid="${child_pid}"
+  elif [ -n "${ACTIVE_GATEWAY_PID}" ] && kill -0 "${ACTIVE_GATEWAY_PID}" 2>/dev/null; then
+    target_pid="${ACTIVE_GATEWAY_PID}"
+  else
+    target_pid="$(find_gateway_listener_pid || true)"
+  fi
+
+  if [ -n "${target_pid}" ]; then
     # Signal the full tree: if we only signal the node parent when a child exists, the child
     # can handle USR1 while the parent never gets a clean shutdown signal.
-    pkill -USR1 -P "${child_pid}" 2>/dev/null || true
-    kill -USR1 "${child_pid}" 2>/dev/null || true
-    log "forwarded SIGUSR1 to gateway process tree (reason=${LAST_RELOAD_REASON})"
+    pkill -USR1 -P "${target_pid}" 2>/dev/null || true
+    kill -USR1 "${target_pid}" 2>/dev/null || true
+    log "forwarded SIGUSR1 to gateway process tree (reason=${LAST_RELOAD_REASON}, pid=${target_pid})"
   else
     log "reload requested with no active gateway child (reason=${LAST_RELOAD_REASON})"
   fi
@@ -717,6 +824,9 @@ shutdown_child() {
   fi
   if [ -n "${child_pid}" ]; then
     kill -TERM "${child_pid}" 2>/dev/null || true
+  fi
+  if [ -n "${ACTIVE_GATEWAY_PID}" ]; then
+    kill -TERM "${ACTIVE_GATEWAY_PID}" 2>/dev/null || true
   fi
 }
 
@@ -785,10 +895,16 @@ while true; do
   child_pid=""
   write_runtime_status
 
-  ensure_no_preexisting_gateway_listener
+  if gateway_listener_healthy; then
+    if adopt_existing_gateway_listener; then
+      monitor_active_gateway_listener
+      continue
+    fi
+  fi
 
   node scripts/run-node.mjs "${ARGS[@]}" &
   child_pid=$!
+  ACTIVE_GATEWAY_PID=""
   start_log_tail "${LOG_FILE}"
   write_runtime_status
 
@@ -817,14 +933,10 @@ while true; do
 
   if [ "${status}" -eq 0 ]; then
     if gateway_listener_healthy; then
-      LAST_RELOAD_RESULT="failure"
-      LAST_RELOAD_REASON="listener_recovery"
-      LAST_RELOAD_ERROR="launcher exited cleanly while a gateway listener remained active; reclaiming listener and retrying"
+      adopt_existing_gateway_listener || true
       BROWSER_RUNTIME_ACTIVE="false"
-      child_pid=""
-      write_runtime_status
-      log "${LAST_RELOAD_ERROR}"
-      request_gateway_listener_teardown
+      log "launcher exited cleanly while a healthy gateway listener remained active; switching to listener supervision"
+      monitor_active_gateway_listener
       continue
     fi
 
@@ -841,6 +953,7 @@ while true; do
   if [ "${status}" -eq 138 ] || [ "${status}" -eq 129 ]; then
     child_pid=""
     BROWSER_RUNTIME_ACTIVE="false"
+    ACTIVE_GATEWAY_PID=""
     LAST_RELOAD_RESULT="success"
     LAST_RELOAD_ERROR=""
     write_runtime_status
