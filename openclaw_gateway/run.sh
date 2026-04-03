@@ -596,6 +596,10 @@ wait_for_gateway_ready() {
   return 1
 }
 
+gateway_listener_healthy() {
+  curl -fsS "http://127.0.0.1:${PORT}/healthz" >/dev/null 2>&1
+}
+
 # Ask OpenClaw to release the gateway port before we spawn again (covers reload races where
 # the supervised node exited but a worker still held 18789).
 request_gateway_listener_teardown() {
@@ -604,6 +608,20 @@ request_gateway_listener_teardown() {
     timeout 40s node scripts/run-node.mjs gateway stop 2>/dev/null
   ) || true
   sleep 1
+}
+
+ensure_no_preexisting_gateway_listener() {
+  if ! gateway_listener_healthy; then
+    return 0
+  fi
+
+  log "detected existing gateway listener on port ${PORT}; requesting teardown before supervisor launch"
+  request_gateway_listener_teardown
+
+  if gateway_listener_healthy; then
+    log "existing gateway listener is still healthy after teardown request; waiting before retry"
+    sleep 2
+  fi
 }
 
 validate_local_browser_runtime() {
@@ -753,9 +771,7 @@ while true; do
   child_pid=""
   write_runtime_status
 
-  if [ "${gateway_supervisor_cycle}" -gt 1 ]; then
-    request_gateway_listener_teardown
-  fi
+  ensure_no_preexisting_gateway_listener
 
   node scripts/run-node.mjs "${ARGS[@]}" &
   child_pid=$!
@@ -786,6 +802,18 @@ while true; do
   fi
 
   if [ "${status}" -eq 0 ]; then
+    if gateway_listener_healthy; then
+      LAST_RELOAD_RESULT="failure"
+      LAST_RELOAD_REASON="listener_recovery"
+      LAST_RELOAD_ERROR="launcher exited cleanly while a gateway listener remained active; reclaiming listener and retrying"
+      BROWSER_RUNTIME_ACTIVE="false"
+      child_pid=""
+      write_runtime_status
+      log "${LAST_RELOAD_ERROR}"
+      request_gateway_listener_teardown
+      continue
+    fi
+
     LAST_RELOAD_RESULT="success"
     LAST_RELOAD_ERROR=""
     BROWSER_RUNTIME_ACTIVE="false"

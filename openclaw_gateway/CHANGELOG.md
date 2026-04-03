@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.9
+
+- **Fix**: Recover from stale local Gateway listeners on supervisor startup and restart.
+  - Detect an already-healthy listener on `127.0.0.1:18789` before spawning the supervised child and request `openclaw gateway stop` first.
+  - If the launcher exits cleanly while a healthy listener still exists, reclaim the listener and retry instead of exiting the add-on.
+  - Prevent duplicate-start races from taking the Home Assistant add-on down with `gateway already running` / `Port 18789 is already in use`.
+
 ## 0.5.8
 
 - **Ops**: Pin the Node base image to a **SHA256 digest** and add OCI **base image** labels for traceability.
