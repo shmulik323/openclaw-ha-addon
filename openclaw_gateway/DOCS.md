@@ -38,6 +38,8 @@ The store build targets **amd64 (x86_64)** only. It is not published for ARM Hom
 | `browser_runtime_mode` | `node_host` (default), `local`, `remote_cdp`, or `off` |
 | `browser_remote_cdp_url` | Remote CDP URL used when `browser_runtime_mode=remote_cdp` |
 | `browser_remote_cdp_profile` | Remote CDP profile name, default `ha_remote` |
+| `gog_account` | Default Google account email for `gog` commands |
+| `gog_keyring_password` | Password used to unlock `gog` token storage non-interactively |
 | `repo_url` | OpenClaw source repository URL |
 | `branch` | Branch to checkout, optional |
 | `github_token` | Token for private repository access |
@@ -199,6 +201,17 @@ If you want local browser support inside the add-on container:
 3. Let the add-on validate local browser launch against the baked-in Chromium runtime
 
 If local mode misbehaves, recover by switching `browser_runtime_mode` back to `node_host` or `off` and restarting the add-on or waiting for the add-on-owned reload to apply.
+
+### Google Workspace CLI usage
+
+The add-on includes `gog` for Gmail, Calendar, Drive, Contacts, Sheets, Docs, and Tasks.
+
+If `gog` is already authenticated but Control UI tool runs fail with a keyring or TTY prompt, set:
+
+- `gog_account` to the Google account email you want to use by default
+- `gog_keyring_password` to the password that unlocks `gog` token storage
+
+The add-on exports both variables into the runtime environment and SSH shells so `gog` can reuse stored auth without an interactive prompt.
 
 ### Bind Mode
 

@@ -8,6 +8,7 @@ Run [OpenClaw](https://github.com/openclaw/openclaw) on Home Assistant OS (**amd
 - 🧭 **Ingress Onboarding** — Complete first-run setup from the add-on panel
 - 🖥️ **Configurable Ingress UI** — Use the embedded Control UI after setup or switch the panel to the terminal UI
 - 🌐 **Browser Runtime Modes** — `node_host` by default, opt-in local Chromium, `remote_cdp`, or `off`
+- 📅 **Google Workspace CLI** — Optional `gog_account` and `gog_keyring_password` options let `gog` use stored Google auth non-interactively from the Control UI and SSH shells
 - 🔁 **Add-on-Owned Reloads** — The add-on watches semantic config changes and reloads the live Gateway child itself
 - 🔑 **Auto Token Bootstrap** — Ingress injects the generated gateway token on first dashboard load
 - 🔓 **Ingress Device-Auth Bypass** — Token auth stays on, but browser device identity is bypassed for the ingress UI

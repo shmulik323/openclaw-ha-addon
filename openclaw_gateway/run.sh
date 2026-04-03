@@ -79,6 +79,18 @@ else
   log "HA_TOKEN not available (set ha_token in add-on config if needed)"
 fi
 
+GOG_ACCOUNT_OPT="$(jq -r '.gog_account // empty' /data/options.json 2>/dev/null || true)"
+if [ -n "${GOG_ACCOUNT_OPT}" ] && [ "${GOG_ACCOUNT_OPT}" != "null" ]; then
+  export GOG_ACCOUNT="${GOG_ACCOUNT_OPT}"
+  log "GOG_ACCOUNT set from add-on options"
+fi
+
+GOG_KEYRING_PASSWORD_OPT="$(jq -r '.gog_keyring_password // empty' /data/options.json 2>/dev/null || true)"
+if [ -n "${GOG_KEYRING_PASSWORD_OPT}" ] && [ "${GOG_KEYRING_PASSWORD_OPT}" != "null" ]; then
+  export GOG_KEYRING_PASSWORD="${GOG_KEYRING_PASSWORD_OPT}"
+  log "GOG_KEYRING_PASSWORD set from add-on options"
+fi
+
 log "config path=${OPENCLAW_CONFIG_PATH}"
 
 cat > /etc/profile.d/openclaw.sh <<EOF
@@ -88,6 +100,8 @@ export BUN_INSTALL="${BUN_INSTALL}"
 export PNPM_HOME="${PNPM_HOME}"
 export PATH="${BASE_DIR}/bin:${BUN_INSTALL}/bin:${PNPM_HOME}:/usr/local/bin:/usr/local/sbin:\${PATH}"
 export PLAYWRIGHT_BROWSERS_PATH="${BASE_DIR}/.cache/ms-playwright"
+export GOG_ACCOUNT="${GOG_ACCOUNT_OPT}"
+export GOG_KEYRING_PASSWORD="${GOG_KEYRING_PASSWORD_OPT}"
 if [ -n "\${SSH_CONNECTION:-}" ]; then
   export OPENCLAW_STATE_DIR="${STATE_DIR}"
   export OPENCLAW_CONFIG_PATH="${STATE_DIR}/openclaw.json"

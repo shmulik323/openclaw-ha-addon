@@ -34,6 +34,8 @@ OpenClaw Gateway for Home Assistant OS (**amd64 / x86_64** only) with ingress on
 | `browser_runtime_mode` | `node_host` (default), `local`, `remote_cdp`, or `off` |
 | `browser_remote_cdp_url` | Remote CDP URL when using `browser_runtime_mode=remote_cdp` |
 | `browser_remote_cdp_profile` | Profile name used for `remote_cdp` mode |
+| `gog_account` | Default Google account email for `gog` |
+| `gog_keyring_password` | Password used to unlock `gog` token storage non-interactively |
 | `repo_url` | OpenClaw source repository |
 | `branch` | Branch to checkout, optional |
 | `github_token` | GitHub token for private repositories |

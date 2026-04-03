@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.10
+
+- **Fix**: Add non-interactive `gog` keyring support for Home Assistant tool runs.
+  - New add-on option: `gog_keyring_password` exports `GOG_KEYRING_PASSWORD` so `gog` can unlock stored Google auth without a TTY prompt.
+  - New add-on option: `gog_account` exports `GOG_ACCOUNT` for default Google account selection.
+  - These variables are now available both to the add-on runtime and SSH shells.
+
 ## 0.5.9
 
 - **Fix**: Recover from stale local Gateway listeners on supervisor startup and restart.
