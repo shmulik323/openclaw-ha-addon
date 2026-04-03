@@ -1,11 +1,11 @@
 {
   "name": "OpenClaw Gateway",
-  "version": "0.5.5",
+  "version": "0.5.8",
   "slug": "openclaw_gateway",
   "description": "OpenClaw Gateway with Home Assistant ingress onboarding",
   "url": "https://github.com/shmulik323/openclaw-ha-addon",
   "documentation": "https://github.com/shmulik323/openclaw-ha-addon",
-  "arch": ["aarch64", "armv7", "amd64"],
+  "arch": ["amd64"],
   "startup": "services",
   "boot": "auto",
   "host_network": false,
@@ -21,7 +21,9 @@
   "map": ["config:rw"],
   "environment": {
     "HOME": "/config/openclaw",
-    "GH_CONFIG_DIR": "/config/openclaw/.config/gh"
+    "GH_CONFIG_DIR": "/config/openclaw/.config/gh",
+    "PATH": "/config/openclaw/bin:/usr/local/bin:/usr/local/sbin:/usr/local/bun/bin:/pnpm:/usr/sbin:/usr/bin:/sbin:/bin",
+    "PLAYWRIGHT_BROWSERS_PATH": "/config/openclaw/.cache/ms-playwright"
   },
   "options": {
     "port": 18789,

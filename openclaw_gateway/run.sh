@@ -5,7 +5,7 @@ log() {
   printf "[addon] %s\n" "$*"
 }
 
-log "run.sh version=2026-04-03-sigusr1-reload-port-teardown"
+log "run.sh version=2026-04-03-playwright-amd64"
 
 BASE_DIR=/config/openclaw
 STATE_DIR="${BASE_DIR}/.openclaw"
@@ -65,6 +65,7 @@ export PNPM_HOME="${PNPM_HOME}"
 export PATH="${BASE_DIR}/bin:${BUN_INSTALL}/bin:${PNPM_HOME}:/usr/local/bin:/usr/local/sbin:${PATH}"
 export OPENCLAW_STATE_DIR="${STATE_DIR}"
 export OPENCLAW_CONFIG_PATH="${STATE_DIR}/openclaw.json"
+export PLAYWRIGHT_BROWSERS_PATH="${BASE_DIR}/.cache/ms-playwright"
 export HA_URL="http://supervisor/core/api/"
 
 HA_TOKEN_OPT="$(jq -r '.ha_token // empty' /data/options.json 2>/dev/null || true)"
@@ -86,6 +87,7 @@ export GH_CONFIG_DIR="${BASE_DIR}/.config/gh"
 export BUN_INSTALL="${BUN_INSTALL}"
 export PNPM_HOME="${PNPM_HOME}"
 export PATH="${BASE_DIR}/bin:${BUN_INSTALL}/bin:${PNPM_HOME}:/usr/local/bin:/usr/local/sbin:\${PATH}"
+export PLAYWRIGHT_BROWSERS_PATH="${BASE_DIR}/.cache/ms-playwright"
 if [ -n "\${SSH_CONNECTION:-}" ]; then
   export OPENCLAW_STATE_DIR="${STATE_DIR}"
   export OPENCLAW_CONFIG_PATH="${STATE_DIR}/openclaw.json"
@@ -207,6 +209,40 @@ fi
 log "installing dependencies"
 pnpm config set confirmModulesPurge false >/dev/null 2>&1 || true
 pnpm install --config.node-linker=hoisted --no-frozen-lockfile --prefer-frozen-lockfile --prod=false
+
+ensure_playwright_chromium_bundle() {
+  local pw_cli="${REPO_DIR}/node_modules/playwright-core/cli.js"
+  if [ ! -f "${pw_cli}" ]; then
+    log "Playwright: playwright-core not present; skipping managed Chromium bundle"
+    return 0
+  fi
+  local pw_ver
+  pw_ver="$(node -p "require('${REPO_DIR}/node_modules/playwright-core/package.json').version" 2>/dev/null || true)"
+  if [ -z "${pw_ver}" ]; then
+    log "Playwright: could not read playwright-core version; skipping"
+    return 0
+  fi
+  export PLAYWRIGHT_BROWSERS_PATH="${BASE_DIR}/.cache/ms-playwright"
+  mkdir -p "${PLAYWRIGHT_BROWSERS_PATH}"
+  local marker="${PLAYWRIGHT_BROWSERS_PATH}/.addon-playwright-version"
+  if [ -f "${marker}" ] && [ "$(tr -d '\r\n' < "${marker}")" = "${pw_ver}" ]; then
+    log "Playwright Chromium bundle up to date (${pw_ver})"
+    return 0
+  fi
+  log "Playwright: install-deps chromium (apt; first run may take several minutes)"
+  if ! DEBIAN_FRONTEND=noninteractive node "${pw_cli}" install-deps chromium >/tmp/playwright-install-deps.log 2>&1; then
+    log "Playwright: install-deps finished with warnings (log: /tmp/playwright-install-deps.log)"
+  fi
+  log "Playwright: downloading Chromium (${pw_ver})"
+  if node "${pw_cli}" install chromium; then
+    printf '%s\n' "${pw_ver}" > "${marker}"
+    log "Playwright Chromium installed under ${PLAYWRIGHT_BROWSERS_PATH}"
+  else
+    log "Playwright: Chromium download failed; local browser mode still uses system /usr/bin/chromium"
+  fi
+}
+
+ensure_playwright_chromium_bundle
 
 log "building gateway"
 pnpm build

@@ -6,7 +6,7 @@ This repository contains Home Assistant add-ons for OpenClaw.
 
 ### openclaw_gateway
 
-OpenClaw Gateway for Home Assistant OS with ingress onboarding, add-on-owned Gateway supervision, supported browser runtime modes, and optional SSH tunnel support.
+OpenClaw Gateway for Home Assistant OS (**amd64 / x86_64** only) with ingress onboarding, add-on-owned Gateway supervision, supported browser runtime modes, and optional SSH tunnel support.
 
 **Included tools:**
 

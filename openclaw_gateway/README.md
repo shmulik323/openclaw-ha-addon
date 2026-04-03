@@ -1,6 +1,6 @@
 # OpenClaw Gateway
 
-Run [OpenClaw](https://github.com/openclaw/openclaw) on Home Assistant OS with Home Assistant ingress onboarding, add-on-owned Gateway supervision, and supported browser runtime modes.
+Run [OpenClaw](https://github.com/openclaw/openclaw) on Home Assistant OS (**amd64 / x86_64** hosts) with Home Assistant ingress onboarding, add-on-owned Gateway supervision, and supported browser runtime modes.
 
 ## Features
 
@@ -13,7 +13,7 @@ Run [OpenClaw](https://github.com/openclaw/openclaw) on Home Assistant OS with H
 - 🔓 **Ingress Device-Auth Bypass** — Token auth stays on, but browser device identity is bypassed for the ingress UI
 - 🔒 **SSH Tunnel** — Optional secure remote access for OpenClaw.app or the CLI
 - 📦 **Persistent Storage** — All data survives add-on updates
-- 🛠️ **Included Tools** — pnpm (global), Claude Code CLI (`claude`), Gemini CLI (`gemini`), gog (Google Workspace), gh (GitHub), hass-cli
+- 🛠️ **Included Tools** — pnpm (global), Claude Code CLI (`claude`), Codex CLI (`codex`), Gemini CLI (`gemini`), Playwright Chromium cache under `/config/openclaw/.cache/ms-playwright`, gog (Google Workspace), gh (GitHub), hass-cli
 
 ## Quick Start
 

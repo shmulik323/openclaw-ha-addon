@@ -11,6 +11,10 @@ This add-on runs the OpenClaw Gateway on Home Assistant OS with Home Assistant i
 - **SSH server** provides optional secure remote access for OpenClaw.app or the CLI
 - **Persistent storage** under `/config/openclaw` survives add-on updates
 
+### Supported platform
+
+The store build targets **amd64 (x86_64)** only. It is not published for ARM Home Assistant hosts (Raspberry Pi, Apple Silicon HA VMs, etc.); use a generic OpenClaw install on those platforms instead.
+
 ## Installation
 
 1. In Home Assistant, go to **Settings → Add-ons → Add-on Store → ⋮ → Repositories**
@@ -87,7 +91,8 @@ This is the default mode.
 
 This mode is supported but opt-in in this release.
 
-- The add-on image ships Chromium
+- The add-on image ships **Debian Chromium** at `/usr/bin/chromium` for the reconciled `openclaw` profile
+- **Playwright-managed Chromium** is also installed after `pnpm install` into `PLAYWRIGHT_BROWSERS_PATH` (default `/config/openclaw/.cache/ms-playwright`), matching upstream’s optional browser bundle. The bundle is refreshed when `playwright-core`’s version changes; first run can take several minutes for `install-deps` + download.
 - The add-on reconciles:
   - `browser.enabled=true`
   - `browser.defaultProfile="openclaw"`
@@ -97,6 +102,8 @@ This mode is supported but opt-in in this release.
 - The add-on validates launch by running `openclaw browser start --browser-profile openclaw` after the Gateway becomes ready
 
 `browser.noSandbox=true` is a Home Assistant add-on container compatibility choice in this environment. It is not a general OpenClaw recommendation for other installs.
+
+OpenClaw features that expect Playwright’s downloaded Chromium will use the persistent path above via the `PLAYWRIGHT_BROWSERS_PATH` environment variable set in add-on `config.json`.
 
 ### `remote_cdp`
 
@@ -149,7 +156,7 @@ pnpm exec openclaw configure
 
 If onboarding offers **Anthropic Claude CLI** authentication, the `claude` binary is installed in the image. Run `claude auth login` once in SSH or the ingress terminal before choosing that path, or pick an API-key-based option instead.
 
-For **Google Gemini CLI OAuth**, the `gemini` command is installed globally; complete the browser OAuth step from the prompt (open the URL on your own machine, then paste the redirect URL back into the terminal).
+For **Google Gemini CLI OAuth**, the `gemini` command is installed globally; complete the browser OAuth step from the prompt (open the URL on your own machine, then paste the redirect URL back into the terminal). OpenClaw discovers it only via `PATH`; this add-on sets `PATH` in `config.json` and symlinks `gemini` into `/usr/bin` so Home Assistant’s container environment still finds it. If you still see “Gemini CLI not found”, rebuild/restart the add-on on **0.5.6+** or run `export PATH="/usr/local/bin:$PATH"` before `npm exec openclaw …`.
 
 The add-on auto-reloads semantic config changes through its own supervisor loop.
 Use a full add-on restart when you change build-time behavior such as repository checkout, SSH server setup, or the baked-in image itself:
@@ -209,11 +216,13 @@ Use `pnpm exec openclaw configure` or `pnpm exec openclaw onboard` to set it in 
 | `/config/openclaw/openclaw-src` | Source repository |
 | `/config/openclaw/.ssh` | SSH keys |
 | `/config/openclaw/.config` | App configs, including `gh` |
+| `/config/openclaw/.cache/ms-playwright` | Playwright Chromium bundle (created after dependency install) |
 
 ## Included Tools
 
 - **pnpm** — Installed globally (`npm install -g pnpm`); always on `PATH` via `/usr/local/bin` in the image and add-on runtime
 - **claude** — Anthropic Claude Code CLI (`@anthropic-ai/claude-code`), for onboarding flows that use Claude CLI auth
+- **codex** — OpenAI Codex CLI (`@openai/codex`), for OpenAI Codex–related onboarding or auth flows that expect `codex` on `PATH`
 - **gemini** — Google Gemini CLI (`@google/gemini-cli`), for onboarding flows that use Gemini CLI OAuth
 - **gog** — Google Workspace CLI ([gogcli.sh](https://gogcli.sh))
 - **gh** — GitHub CLI ([cli.github.com](https://cli.github.com))
@@ -282,6 +291,32 @@ ha addons logs local_openclaw -n 200
 ### Build takes too long
 
 The first boot runs a full build and may take several minutes. Subsequent starts are faster.
+
+## Docker / fleet operations (how this add-on maps to common practices)
+
+| Practice | In this project |
+| --- | --- |
+| **Multi-stage builds** | The image is not multi-stage: OpenClaw is **cloned and built at container start** into `/config/openclaw/openclaw-src`, so compilers (`g++`, `make`) stay in the runtime image by design. A smaller image would require **baking** a prebuilt OpenClaw artifact in CI and dropping build tools from the final stage (larger change). |
+| **Layer caching** | Stable steps (apt, global npm CLIs) are ordered before `COPY` of add-on scripts so cache hits are more likely on script-only changes. |
+| **Minimal base** | Uses **`node:*-bookworm-slim`**, not the full bookworm image. Distroless is a poor fit while `run.sh` needs a shell, `apt` (Playwright `install-deps`), `nginx`, and `sshd`. |
+| **Pin base versions** | The Dockerfile pins the Node base image to a **SHA256 digest**; refresh it when bumping the Node major or for security rebuilds (`docker buildx imagetools inspect node:24-bookworm-slim`). |
+| **Resource limits** | Set CPU/memory caps in **Home Assistant** for the add-on container where your Supervisor version supports it, so the gateway cannot starve the host. |
+| **Ephemeral containers** | Stateful data is only under **`/config/openclaw`** (mapped volume). The container itself is replaceable; do not rely on writes outside `/config`. |
+| **Secrets** | Use add-on options (`github_token`, `ha_token`, gateway token in `openclaw.json`) and **never** bake secrets into the image. |
+| **Logging** | Primary diagnostics: **`ha addons logs`** (Supervisor captures container stdout/stderr from `/run.sh` and children). |
+| **Non-root** | The process runs as **root**, which is typical for HA add-ons that own `/config` bind mounts and optional `sshd`. Tightening this would need Supervisor-compatible UID/GID mapping. |
+| **Vulnerability scanning** | Run **Trivy**, **Snyk**, or registry scanning on built images before publishing to a registry. |
+| **Health checks** | The Dockerfile defines **`HEALTHCHECK`** against `http://127.0.0.1:18789/healthz` with a long **start-period** for first-boot builds. Orchestrator behavior depends on your environment. |
+
+## Supported vs limited on Home Assistant
+
+| Area | On this add-on |
+| --- | --- |
+| Gateway + Control UI + ingress | Supported |
+| Provider CLI onboarding (`claude`, `codex`, `gemini`, …) | Supported on **amd64** with explicit `PATH` / symlinks |
+| Local browser (`browser_runtime_mode=local`) | System Chromium + validated profile |
+| Playwright-downloaded Chromium | Installed to `/config/openclaw/.cache/ms-playwright` for upstream-aligned automation |
+| Agent sandbox (`agents.defaults.sandbox` + host Docker) | **Not wired by default**; mounting host `docker.sock` would be a major trust decision on HA OS. Prefer `sandbox.mode: off` here or run OpenClaw on a full Docker/VM host for sandboxing. |
 
 ## Security Notes
 

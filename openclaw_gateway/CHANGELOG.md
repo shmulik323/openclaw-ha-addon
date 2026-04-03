@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.5.8
+
+- **Ops**: Pin the Node base image to a **SHA256 digest** and add OCI **base image** labels for traceability.
+- **Ops**: Add a **HEALTHCHECK** that probes `http://127.0.0.1:18789/healthz` with a long **start-period** so first-boot clone/build/Playwright steps do not mark the container unhealthy prematurely.
+- **Docs**: Document how large-scale Docker practices (multi-stage, slim base, limits, secrets, scanning, non-root) apply—or do not—to this Home Assistant add-on.
+
+## 0.5.7
+
+- **Platform**: Publish the add-on for **amd64 (x86_64)** only; drop `aarch64` / `armv7` store targets for this repository build.
+- **Feature**: After `pnpm install`, install **Playwright Chromium** into persistent `/config/openclaw/.cache/ms-playwright` when `playwright-core` changes (runs `install-deps` + `install chromium`); set `PLAYWRIGHT_BROWSERS_PATH` in add-on environment for OpenClaw parity with upstream’s optional browser bundle.
+- **Feature**: Ship **OpenAI Codex CLI** (`@openai/codex`, `codex`) globally with `/usr/bin` symlink like other provider CLIs.
+- **Chore**: Align base apt set with upstream runtime helpers: `procps`, `hostname`, `lsof`, `openssl`, plus `xvfb` for Playwright-friendly headless setups.
+
+## 0.5.6
+
+- **Fix**: Set an explicit `PATH` in add-on `config.json` and ship `/etc/profile.d/openclaw-path.sh` so `process.env.PATH` seen by `npm exec openclaw` includes `/usr/local/bin` where `gemini`, `claude`, and `pnpm` are installed (OpenClaw’s Gemini CLI OAuth uses `findInPath("gemini")` and only scans `PATH`).
+- **Fix**: Symlink `gemini`, `claude`, and `pnpm` into `/usr/bin` so minimal `PATH` layouts still resolve those binaries.
+
 ## 0.5.5
 
 - **Fix**: Treat Linux SIGUSR1 shutdown as exit status **138** (128+10), not 129 (SIGHUP), so config hot-reload no longer looks like a crash and avoids the “fallback restart” path.
